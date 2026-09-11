@@ -80,11 +80,21 @@ for /L %%i in (1,1,30) do (
 :opened
 if "%READY%"=="1" (
   echo.
-  echo [OK] برنامه آماده است! مرورگر باز می‌شود...
-  echo آدرس: http://localhost:8080/
+  echo [OK] برنامه آماده است! پنجره برنامه باز می‌شود...
   echo.
   echo با «ثبت‌نام» یک حساب بسازید و وارد شوید.
   echo رسیدهای شما فقط برای خودتان ذخیره می‌شود.
+  REM باز کردن مثل یک برنامه واقعی (پنجره جدا، بدون نوار آدرس)
+  where msedge >nul 2>&1
+  if not errorlevel 1 (
+    start "" msedge --app=http://localhost:8080/
+    goto :done
+  )
+  where chrome >nul 2>&1
+  if not errorlevel 1 (
+    start "" chrome --app=http://localhost:8080/
+    goto :done
+  )
   start http://localhost:8080/
 ) else (
   echo.
@@ -94,6 +104,7 @@ if "%READY%"=="1" (
   echo اگر باز نشد، این دستور را ببینید: docker logs %CNAME%
 )
 
+:done
 echo.
 echo برای خاموش کردن: روی Stop-ReceiptVision.bat دابل‌کلیک کنید.
 echo (اطلاعات شما پاک نمی‌شود.)
