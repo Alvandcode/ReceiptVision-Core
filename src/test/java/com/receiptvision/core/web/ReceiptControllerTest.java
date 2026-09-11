@@ -47,6 +47,15 @@ class ReceiptControllerTest {
     @MockBean
     private AuthService authService;
 
+    // The real JwtAuthenticationFilter IS picked up by the @WebMvcTest slice
+    // (it is a Filter @Component), so its constructor deps must exist as beans.
+    // With addFilters=false below it never runs; these mocks only satisfy wiring.
+    @MockBean
+    private com.receiptvision.core.security.JwtService jwtService;
+
+    @MockBean
+    private com.receiptvision.core.security.DatabaseUserDetailsService userDetailsService;
+
     private AppUser user() {
         return new AppUser("ali", "hash");
     }

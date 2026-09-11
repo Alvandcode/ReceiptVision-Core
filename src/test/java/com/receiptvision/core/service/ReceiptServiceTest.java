@@ -43,11 +43,11 @@ class ReceiptServiceTest {
         service = new ReceiptService(repository, ocrService, 10 * 1024 * 1024);
         ali = new AppUser("ali", "hash");
         sara = new AppUser("sara", "hash");
-        when(ocrService.getLanguages()).thenReturn("fas+eng");
     }
 
     @Test
     void store_savesUnderOwnerOnly() throws Exception {
+        when(ocrService.getLanguages()).thenReturn("fas+eng");
         MockMultipartFile file = new MockMultipartFile(
                 "file", "receipt.jpg", "image/jpeg", new byte[]{1, 2, 3});
         when(ocrService.extractText(any(InputStream.class), any()))
