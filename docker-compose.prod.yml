@@ -1,0 +1,55 @@
+# ReceiptVision production stack for PHONE access from outside the home.
+#
+# Why this file exists: phones cannot run Docker. The app must run on ONE
+# always-on machine (a home PC or a cheap VPS) with a domain + HTTPS, and
+# phones just open the address in their browser (installable PWA).
+#
+# Usage (on the server, needs a domain pointing to it):
+#   DOMAIN=receipt.example.com APP_JWT_SECRET="$(openssl rand -base64 48)" \
+#     docker compose -f docker-compose.prod.yml up --build -d
+#
+# Then on the phone: open https://receipt.example.com -> login -> Add to Home Screen.
+
+services:
+  receiptvision:
+    build: .
+    image: receiptvision:prod
+    environment:
+      PORT: 8080
+      SPRING_DATASOURCE_URL: "jdbc:h2:file:/data/receiptsdb;DB_CLOSE_ON_EXIT=FALSE;DB_CLOSE_DELAY=-1;AUTO_SERVER=FALSE"
+      H2_CONSOLE_ENABLED: "false"
+      OCR_LANGUAGES: "fas+eng"
+      APP_JWT_SECRET: "${APP_JWT_SECRET:?Set APP_JWT_SECRET env (openssl rand -base64 48)}"
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+    volumes:
+      - receipt-data:/data
+    restart: unless-stopped
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      DOMAIN: "${DOMAIN:?Set DOMAIN env, e.g. receipt.example.com}"
+    restart: unless-stopped
+    depends_on:
+      receiptvision:
+        condition: service_healthy
+
+volumes:
+  receipt-data:
+  caddy-data:
+  caddy-config:

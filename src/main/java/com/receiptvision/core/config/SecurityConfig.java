@@ -32,8 +32,11 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .authorizeHttpRequests(auth -> auth
-                        // Public UI + health + auth endpoints
-                        .requestMatchers("/", "/index.html", "/app.js", "/styles.css", "/favicon.ico").permitAll()
+                        // Public UI (incl. PWA shell for phones) + health + auth endpoints.
+                        // NOTE: every new file under src/main/resources/static MUST be listed
+                        // here too, otherwise phones get 401 on manifest/icons/sw.js.
+                        .requestMatchers("/", "/index.html", "/app.js", "/styles.css", "/favicon.ico",
+                                "/manifest.webmanifest", "/sw.js", "/icon-192.png", "/icon-512.png").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         // Swagger is public for discovery, but every /api/receipts call still needs JWT

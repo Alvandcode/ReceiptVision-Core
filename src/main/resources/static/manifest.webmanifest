@@ -1,0 +1,26 @@
+{
+  "name": "ReceiptVision — رسیدهای من",
+  "short_name": "ReceiptVision",
+  "description": "عکس رسید را ثبت کنید و متن آن را استخراج کنید. کاملا خصوصی.",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

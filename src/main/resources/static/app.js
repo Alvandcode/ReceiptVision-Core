@@ -2,8 +2,9 @@ const $ = (id) => document.getElementById(id);
 const authCard = $('authCard'), appMain = $('appMain');
 const usernameEl = $('username'), passwordEl = $('password');
 const authMsg = $('authMsg'), whoami = $('whoami'), logoutBtn = $('logoutBtn');
-const drop = $('drop'), fileInput = $('file'), preview = $('preview');
-const uploadBtn = $('uploadBtn'), clearBtn = $('clearBtn');
+const drop = $('drop'), fileInput = $('file'), cameraInput = $('camera'), preview = $('preview');
+const uploadBtn = $('uploadBtn'), clearBtn = $('clearBtn'), cameraBtn = $('cameraBtn');
+const installBtn = $('installBtn');
 const uploadMsg = $('uploadMsg'), ocrOut = $('ocrOut');
 const listEl = $('list'), listMsg = $('listMsg');
 const dialog = $('detailDialog'), dTitle = $('dTitle'), dBody = $('dBody');
@@ -121,10 +122,12 @@ function setFile(f) {
 drop.addEventListener('click', () => fileInput.click());
 drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
 fileInput.addEventListener('change', () => setFile(fileInput.files[0] || null));
+cameraInput.addEventListener('change', () => setFile(cameraInput.files[0] || null));
+if (cameraBtn) cameraBtn.addEventListener('click', (e) => { e.stopPropagation(); cameraInput.click(); });
 ['dragover', 'dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
 drop.addEventListener('drop', (e) => setFile(e.dataTransfer.files[0] || null));
-clearBtn.addEventListener('click', () => { fileInput.value = ''; setFile(null); setMsg(uploadMsg, ''); ocrOut.hidden = true; });
+clearBtn.addEventListener('click', () => { fileInput.value = ''; cameraInput.value = ''; setFile(null); setMsg(uploadMsg, ''); ocrOut.hidden = true; });
 
 uploadBtn.addEventListener('click', async () => {
   if (!selectedFile) return;
@@ -233,3 +236,18 @@ if (isLoggedIn()) enterApp();
 else showAuth(true);
 checkHealth();
 setInterval(checkHealth, 30000);
+
+// PWA install prompt (Android/Chrome). iPhone: Share -> Add to Home Screen.
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (installBtn) installBtn.hidden = false;
+});
+if (installBtn) installBtn.addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice.catch(() => {});
+  deferredPrompt = null;
+  installBtn.hidden = true;
+});

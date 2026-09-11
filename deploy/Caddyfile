@@ -1,0 +1,7 @@
+# Caddy reverse proxy: automatic free HTTPS for the domain in ${DOMAIN}.
+# The phone PWA (camera, install prompt, service worker) requires HTTPS
+# when used outside the local network, so this file is mandatory for that.
+
+{$DOMAIN} {
+	reverse_proxy receiptvision:8080
+}
