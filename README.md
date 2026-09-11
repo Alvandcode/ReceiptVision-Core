@@ -1,3 +1,19 @@
+# ReceiptVision-Core
+
+[![Stars](https://img.shields.io/github/stars/Alvandcode/ReceiptVision-Core?style=flat-square)](https://github.com/Alvandcode/ReceiptVision-Core/stargazers) [![License](https://img.shields.io/github/license/Alvandcode/ReceiptVision-Core?style=flat-square)](./LICENSE) [![Last commit](https://img.shields.io/github/last-commit/Alvandcode/ReceiptVision-Core?style=flat-square)](https://github.com/Alvandcode/ReceiptVision-Core/commits)
+
+> Receipt OCR service with Spring Boot & Tesseract — fully Dockerized, Persian web UI + developer API.
+
+<div dir="rtl">
+
+## سرویس استخراج متن از رسید
+
+سرویس استخراج متن از رسید با Spring Boot و Tesseract؛ کاملا داکرایز شده با رابط وب فارسی برای کاربران عادی و API برای توسعه‌دهندگان.
+
+</div>
+
+---
+
 <div align="center">
 
 # 🧾 ReceiptVision — دو نسخه در یک ایمیج
@@ -203,3 +219,19 @@ curl -X DELETE http://localhost:8080/api/receipts/1 -H "Authorization: Bearer $T
 ## 📄 لایسنس
 
 این پروژه تحت لایسنس [MIT](LICENSE) منتشر شده است.
+
+---
+
+## Contributing / مشارکت
+
+- EN: Issues and Pull Requests are welcome. Please see `CONTRIBUTING.md`.
+- FA: برای گزارش مشکل یا پیشنهاد قابلیت جدید، لطفا ایشو یا پول‌ریکوئست ثبت کنید.
+
+## License / لایسنس
+
+MIT — see [LICENSE](./LICENSE).
+
+## Contact / ارتباط
+
+- Telegram: https://t.me/a_c_official
+- Website: https://alvandcode.github.io
