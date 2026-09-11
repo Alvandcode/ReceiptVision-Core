@@ -1,0 +1,48 @@
+name: Release image to GHCR
+
+# Builds the Docker image and pushes it to GitHub Container Registry,
+# so NORMAL users never need source code, Java, Maven or `docker build`.
+# They only download Start-ReceiptVision.bat and double-click it.
+#
+# Image: ghcr.io/alvandcode/receiptvision-core:latest  (on every main push)
+#        ghcr.io/alvandcode/receiptvision-core:vX.Y.Z  (on tags like v0.2.0)
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/alvandcode/receiptvision-core
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
