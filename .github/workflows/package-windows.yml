@@ -1,0 +1,79 @@
+name: Windows portable package (no Docker needed)
+
+# Builds a ready-to-run Windows folder and zips it:
+#   ReceiptVision/
+#     Start.bat / Stop.bat / README.txt   (double-click, no install)
+#     app/receiptvision-core.jar          (built here with Maven)
+#     jre/                                (portable Eclipse Temurin 17)
+#     tesseract/                          (tesseract.exe + tessdata eng+fas)
+#     data/                               (receipts database, created on run)
+#
+# Normal users download ONLY the zip from the Releases page.
+# No Docker, no Java, no admin rights, no internet needed to run.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build jar (runs all tests)
+        run: mvn -B verify
+
+      - name: Download portable JRE 17
+        shell: pwsh
+        run: |
+          curl.exe -L -o jre.zip "https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jre/hotspot/normal/eclipse"
+          Expand-Archive jre.zip jre-tmp
+          $inner = (Get-ChildItem jre-tmp | Select-Object -First 1).FullName
+          Move-Item $inner jre
+          .\jre\bin\java.exe -version
+
+      - name: Get portable Tesseract + Persian data
+        shell: pwsh
+        run: |
+          choco install tesseract --no-progress -y
+          New-Item -ItemType Directory -Force tesseract | Out-Null
+          Copy-Item "C:\Program Files\Tesseract-OCR\tesseract.exe" tesseract\
+          Copy-Item -Recurse "C:\Program Files\Tesseract-OCR\tessdata" tesseract\
+          curl.exe -L -o tesseract\tessdata\fas.traineddata "https://github.com/tesseract-ocr/tessdata_fast/raw/main/fas.traineddata"
+          .\tesseract\tesseract.exe --list-langs
+
+      - name: Assemble package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force ReceiptVision\app, ReceiptVision\data | Out-Null
+          Copy-Item target\receiptvision-core.jar ReceiptVision\app\
+          Copy-Item -Recurse jre ReceiptVision\
+          Copy-Item -Recurse tesseract ReceiptVision\
+          Copy-Item windows-package\* ReceiptVision\
+          Compress-Archive -Path ReceiptVision -DestinationPath ReceiptVision-Windows.zip
+          Get-ChildItem ReceiptVision-Windows.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReceiptVision-Windows
+          path: ReceiptVision-Windows.zip
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ReceiptVision-Windows.zip
+          generate_release_notes: true

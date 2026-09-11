@@ -28,9 +28,8 @@
 ---
 
 > ### 👤 کاربر عادی هستید و داکر/کد بلد نیستید؟
-> **هیچ دستوری لازم نیست.** فقط راهنمای ۳قدمی را بخوانید: **[USER-GUIDE-FA.md](USER-GUIDE-FA.md)**
-> خلاصه: Docker Desktop نصب کنید → روی `Start-ReceiptVision.bat` دابل‌کلیک کنید → مرورگر باز می‌شود.
-> ایمیج آماده است (`ghcr.io/alvandcode/receiptvision-core:latest`) و نیازی به سورس‌کد، جاوا یا `docker build` نیست.
+> **نه داکر لازم است، نه نصب، نه دستور.** فقط راهنما را بخوانید: **[USER-GUIDE-FA.md](USER-GUIDE-FA.md)**
+> خلاصه: از صفحه **Releases** فایل `ReceiptVision-Windows.zip` را دانلود کنید → بازش کنید → روی `Start.bat` دابل‌کلیک کنید → برنامه باز می‌شود.
 
 ## 📖 درباره‌ی پروژه
 
