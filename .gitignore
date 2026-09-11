@@ -1,16 +1,13 @@
-# Compiled class file
+# Maven build output
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# Compiled classes
 *.class
 
-# Log file
-*.log
-
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
+# Package files (keep builds out of git)
 *.jar
 *.war
 *.nar
@@ -19,6 +16,39 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# Logs
+*.log
+logs/
+
+# H2 database files (local /data should never be committed)
+*.db
+*.mv.db
+*.trace.db
+/data/
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.code-workspace
+.settings/
+.classpath
+.project
+*.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env secrets
+.env
+.env.local
+
+# JVM crash logs
 hs_err_pid*
 replay_pid*
+
+# Temp OCR files
+/tmp/ocr/

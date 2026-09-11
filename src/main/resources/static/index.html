@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ReceiptVision — خصوصی و شخصی</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🧾 ReceiptVision 🔒</div>
+    <div class="top-links">
+      <span id="whoami" class="health" hidden></span>
+      <span id="health" class="health" title="وضعیت سرویس">…</span>
+      <button id="logoutBtn" class="ghost small" hidden>خروج</button>
+      <a href="/swagger-ui.html" target="_blank" rel="noopener">مستندات دولوپر</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <section id="authCard" class="card" hidden>
+      <h1>ورود / ثبت‌نام</h1>
+      <p class="muted">🔒 حریم خصوصی کامل: هر رسید فقط برای حساب خودتان ذخیره و نمایش داده می‌شود. هیچ کاربر دیگری — حتی با حدس شناسه — به فایل شما دسترسی ندارد. فایل‌های قدیمی بدون مالک به‌صورت خودکار حذف شده‌اند.</p>
+      <div class="form">
+        <label>نام کاربری (انگلیسی، ۳ تا ۳۲ حرف)
+          <input id="username" autocomplete="username" maxlength="32" dir="ltr" placeholder="ali_90" />
+        </label>
+        <label>رمز عبور (حداقل ۸ حرف)
+          <input id="password" type="password" autocomplete="current-password" maxlength="100" dir="ltr" />
+        </label>
+      </div>
+      <div class="row">
+        <button id="loginBtn">ورود</button>
+        <button id="registerBtn" class="ghost">ساخت حساب</button>
+      </div>
+      <div id="authMsg" class="msg" role="status"></div>
+    </section>
+
+    <div id="appMain" hidden>
+      <section class="card">
+        <h1>آپلود رسید</h1>
+        <p class="muted">عکس رسید را بکشید و رها کنید یا انتخاب کنید (jpg/png/webp/tiff/bmp تا ۱۰ مگ). فقط در حساب شما ذخیره می‌شود.</p>
+        <div id="drop" class="drop" tabindex="0">
+          <input id="file" type="file" accept="image/jpeg,image/png,image/webp,image/tiff,image/bmp" hidden />
+          <div class="drop-hint">📤 برای انتخاب کلیک کنید یا فایل را اینجا رها کنید</div>
+          <img id="preview" class="preview" alt="" hidden />
+        </div>
+        <div class="row">
+          <button id="uploadBtn" disabled>استخراج متن</button>
+          <button id="clearBtn" class="ghost" disabled>پاک کردن</button>
+        </div>
+        <div id="uploadMsg" class="msg" role="status"></div>
+        <pre id="ocrOut" class="ocr" hidden></pre>
+      </section>
+
+      <section class="card">
+        <div class="list-head">
+          <h2>رسیدهای من (خصوصی)</h2>
+          <div class="row">
+            <button id="refreshBtn" class="ghost">↻ تازه‌سازی</button>
+            <button id="moreBtn" class="ghost">نمایش بیشتر</button>
+          </div>
+        </div>
+        <div id="listMsg" class="msg"></div>
+        <ul id="list" class="list"></ul>
+      </section>
+    </div>
+
+    <section class="card dev-card">
+      <h2>نسخه دولوپر (API با JWT)</h2>
+      <pre class="code" dir="ltr">POST /api/auth/register   {"username","password"} -&gt; {token}
+POST /api/auth/login      {"username","password"} -&gt; {token}
+GET  /api/auth/me         Authorization: Bearer &lt;jwt&gt;
+POST /api/receipts        Authorization: Bearer &lt;jwt&gt; (multipart file)
+GET  /api/receipts        Authorization: Bearer &lt;jwt&gt; (only yours)</pre>
+      <p class="muted"><a href="/swagger-ui.html" target="_blank" rel="noopener">Swagger UI</a> • بدون توکن همه درخواست‌های رسید <b>401</b> می‌شوند.</p>
+    </section>
+  </main>
+
+  <dialog id="detailDialog">
+    <h3 id="dTitle">جزئیات رسید</h3>
+    <pre id="dBody" class="ocr"></pre>
+    <div class="row">
+      <button id="dDelete">حذف این رسید</button>
+      <button id="dClose" class="ghost">بستن</button>
+    </div>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+:root { --bg:#0f172a; --card:#1e293b; --text:#e2e8f0; --muted:#94a3b8; --accent:#22c55e; --danger:#ef4444; }
+* { box-sizing:border-box; }
+body { margin:0; font-family:Vazirmatn,Tahoma,Arial,sans-serif; background:var(--bg); color:var(--text); }
+.topbar { display:flex; justify-content:space-between; align-items:center; padding:12px 20px; background:#020617; border-bottom:1px solid #1e293b; position:sticky; top:0; }
+.brand { font-weight:700; font-size:18px; }
+.top-links { display:flex; gap:12px; align-items:center; }
+.top-links a { color:var(--text); font-size:13px; }
+.health { font-size:12px; padding:4px 10px; border-radius:999px; background:#334155; }
+.health.ok { background:#14532d; }
+.health.down { background:#7f1d1d; }
+.container { max-width:860px; margin:0 auto; padding:20px 16px 60px; display:grid; gap:16px; }
+.card { background:var(--card); border:1px solid #334155; border-radius:14px; padding:18px; }
+.muted { color:var(--muted); font-size:13px; }
+.drop { border:2px dashed #475569; border-radius:12px; padding:26px; text-align:center; cursor:pointer; margin:12px 0; }
+.drop.over { border-color:var(--accent); background:#052e16; }
+.preview { max-width:100%; max-height:260px; border-radius:10px; margin-top:12px; display:block; }
+.row { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; }
+button { background:var(--accent); color:#052e16; border:0; border-radius:10px; padding:10px 18px; font-weight:700; cursor:pointer; }
+button:disabled { opacity:.45; cursor:not-allowed; }
+button.ghost { background:transparent; color:var(--text); border:1px solid #475569; }
+.msg { min-height:20px; font-size:13px; margin-top:8px; }
+.msg.err { color:#fca5a5; }
+.msg.ok { color:#86efac; }
+.ocr { background:#020617; border:1px solid #334155; border-radius:10px; padding:12px; white-space:pre-wrap; max-height:300px; overflow:auto; direction:auto; }
+.list { list-style:none; padding:0; margin:12px 0 0; display:grid; gap:10px; }
+.list li { background:#020617; border:1px solid #334155; border-radius:10px; padding:10px 12px; display:flex; justify-content:space-between; gap:10px; align-items:center; }
+.list .meta { font-size:12px; color:var(--muted); }
+.list .actions { display:flex; gap:8px; }
+.list button { padding:6px 12px; font-size:12px; }
+.code { background:#020617; padding:12px; border-radius:10px; font-size:12px; overflow:auto; }
+dialog { background:var(--card); color:var(--text); border:1px solid #475569; border-radius:14px; max-width:min(640px,92vw); }
+dialog::backdrop { background:rgba(0,0,0,.6); }

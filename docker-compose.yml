@@ -1,0 +1,30 @@
+# ReceiptVision: single image serves BOTH editions
+#  - Normal users -> http://localhost:8080/ (Persian web UI)
+#  - Developers   -> http://localhost:8080/api/receipts + /swagger-ui.html
+services:
+  receiptvision:
+    build: .
+    image: receiptvision:0.1.0
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      PORT: 8080
+      SPRING_DATASOURCE_URL: "jdbc:h2:file:/data/receiptsdb;DB_CLOSE_ON_EXIT=FALSE;DB_CLOSE_DELAY=-1;AUTO_SERVER=FALSE"
+      H2_CONSOLE_ENABLED: "false"
+      OCR_LANGUAGES: "fas+eng"
+      # REQUIRED for privacy: random 32+ byte JWT secret. Generate once and keep it:
+      #   openssl rand -base64 48
+      APP_JWT_SECRET: "${APP_JWT_SECRET:-change-me-in-production-min-32-chars-please}"
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+    volumes:
+      - receipt-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  receipt-data:
