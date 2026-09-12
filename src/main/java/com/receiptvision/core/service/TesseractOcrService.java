@@ -34,10 +34,35 @@ public class TesseractOcrService implements OcrService {
             @Value("${app.ocr.psm:3}") String psm,
             @Value("${app.ocr.timeout-seconds:30}") long timeoutSeconds,
             @Value("${app.ocr.command:tesseract}") String tesseractCommand) {
-        this.languages = languages;
-        this.psm = psm;
+        this.languages = validateLanguages(languages);
+        this.psm = validatePsm(psm);
+        if (timeoutSeconds < 5 || timeoutSeconds > 120) {
+            throw new IllegalStateException("app.ocr.timeout-seconds must be 5-120");
+        }
         this.timeoutSeconds = timeoutSeconds;
-        this.tesseractCommand = tesseractCommand;
+        if (tesseractCommand == null || tesseractCommand.isBlank()
+                || tesseractCommand.contains(";") || tesseractCommand.contains("&")
+                || tesseractCommand.contains("|") || tesseractCommand.contains("`")
+                || tesseractCommand.contains("$")) {
+            throw new IllegalStateException("app.ocr.command contains illegal characters");
+        }
+        this.tesseractCommand = tesseractCommand.trim();
+    }
+
+    private static String validateLanguages(String languages) {
+        if (languages == null || languages.isBlank() || languages.length() > 64
+                || !languages.matches("[a-zA-Z+_\\-]+")) {
+            throw new IllegalStateException(
+                    "app.ocr.languages must match [a-zA-Z+_-]{1,64} (e.g. fas+eng)");
+        }
+        return languages.trim();
+    }
+
+    private static String validatePsm(String psm) {
+        if (psm == null || !psm.matches("([0-9]|1[0-3])")) {
+            throw new IllegalStateException("app.ocr.psm must be 0-13");
+        }
+        return psm;
     }
 
     @Override
@@ -74,17 +99,24 @@ public class TesseractOcrService implements OcrService {
             int exitCode = process.exitValue();
 
             if (exitCode != 0) {
-                log.warn("Tesseract failed with exit code {}: {}", exitCode, stderr);
-                throw new OcrException("OCR failed (exit " + exitCode + "): " + stderr.strip());
+                // Log full stderr server-side, but never return it to the client:
+                // it contains temp paths / versions (see GlobalExceptionHandler).
+                log.warn("Tesseract failed with exit code {}: {}", exitCode, truncate(stderr, 2000));
+                throw new OcrException("OCR failed with exit code " + exitCode);
             }
 
             String text = stdout.strip();
             if (text.isEmpty()) {
-                log.warn("Tesseract returned empty text. stderr: {}", stderr);
+                log.warn("Tesseract returned empty text. stderr: {}", truncate(stderr, 1000));
+            }
+            // Cap text to avoid a malicious image producing GBs of output -> OOM/DB blowup.
+            if (text.length() > 100_000) {
+                log.warn("Truncating oversized OCR output ({} chars)", text.length());
+                text = text.substring(0, 100_000);
             }
             return text;
         } catch (IOException e) {
-            throw new OcrException("Failed to run Tesseract binary: " + e.getMessage(), e);
+            throw new OcrException("Failed to run OCR engine", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new OcrException("OCR was interrupted", e);
@@ -116,5 +148,12 @@ public class TesseractOcrService implements OcrService {
             case "image/bmp" -> ".bmp";
             default -> ".img";
         };
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) {
+            return "";
+        }
+        return s.length() <= max ? s : s.substring(0, max);
     }
 }

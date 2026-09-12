@@ -1,6 +1,7 @@
 package com.receiptvision.core.service;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -24,17 +25,35 @@ public class ReceiptService {
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
             "image/jpeg", "image/png", "image/webp", "image/tiff", "image/bmp");
 
+    // Decompression-bomb guard: reject absurd dimensions / pixel counts even
+    // when the file itself is under maxFileSize (a 10MB JPEG can expand hugely).
+    private static final int MAX_IMAGE_WIDTH = 8000;
+    private static final int MAX_IMAGE_HEIGHT = 8000;
+    private static final long MAX_IMAGE_PIXELS = 50_000_000L;
+
     private final ReceiptRepository repository;
     private final OcrService ocrService;
     private final long maxFileSize;
+    private final long maxReceiptsPerUser;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ReceiptService(
             ReceiptRepository repository,
             OcrService ocrService,
-            @Value("${app.upload.max-file-size:10485760}") long maxFileSize) {
+            @Value("${app.upload.max-file-size:10485760}") long maxFileSize,
+            @Value("${app.upload.max-receipts-per-user:2000}") long maxReceiptsPerUser) {
         this.repository = repository;
         this.ocrService = ocrService;
         this.maxFileSize = maxFileSize;
+        this.maxReceiptsPerUser = maxReceiptsPerUser;
+    }
+
+    // Backwards-compatible constructor for existing tests / slices that pass 3 args.
+    public ReceiptService(
+            ReceiptRepository repository,
+            OcrService ocrService,
+            long maxFileSize) {
+        this(repository, ocrService, maxFileSize, 2000L);
     }
 
     private static AppUser requireOwner(AppUser owner) {
@@ -49,6 +68,10 @@ public class ReceiptService {
     public ReceiptResponse store(AppUser owner, MultipartFile file) {
         requireOwner(owner);
         validate(file);
+        if (repository.countByOwner(owner) >= maxReceiptsPerUser) {
+            throw new IllegalArgumentException(
+                    "Receipt quota exceeded. Max " + maxReceiptsPerUser + " per user.");
+        }
 
         String contentType = file.getContentType();
         String text;
@@ -113,6 +136,32 @@ public class ReceiptService {
         String filename = file.getOriginalFilename();
         if (filename != null && (filename.contains("..") || filename.contains("/") || filename.contains("\\"))) {
             throw new IllegalArgumentException("Invalid file name");
+        }
+        validateImageContent(file);
+    }
+
+    /**
+     * Verifies the bytes are actually a decodable image (not just a spoofed
+     * Content-Type) and rejects absurd dimensions to blunt decompression bombs.
+     */
+    private void validateImageContent(MultipartFile file) {
+        try (InputStream in = file.getInputStream()) {
+            java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(in);
+            if (img == null) {
+                throw new IllegalArgumentException("File is not a readable image");
+            }
+            int w = img.getWidth();
+            int h = img.getHeight();
+            if (w <= 0 || h <= 0 || w > MAX_IMAGE_WIDTH || h > MAX_IMAGE_HEIGHT) {
+                throw new IllegalArgumentException(
+                        "Image dimensions out of range (max " + MAX_IMAGE_WIDTH + "x" + MAX_IMAGE_HEIGHT + ")");
+            }
+            long pixels = (long) w * (long) h;
+            if (pixels > MAX_IMAGE_PIXELS) {
+                throw new IllegalArgumentException("Image has too many pixels");
+            }
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Could not read uploaded image", e);
         }
     }
 }

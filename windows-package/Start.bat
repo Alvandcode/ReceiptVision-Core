@@ -34,11 +34,12 @@ if not exist "%TESSDIR%\tesseract.exe" (
   exit /b 1
 )
 
-REM ---- کلید امنیتی شخصی (فقط بار اول ساخته می‌شود) ----
+REM ---- کلید امنیتی شخصی (فقط بار اول ساخته می‌شود، CSPRNG) ----
 if not exist "%SECRET_FILE%" (
   echo [..] ساخت کلید امنیتی برای اولین بار...
   if not exist "%APPDATA%\ReceiptVision" mkdir "%APPDATA%\ReceiptVision"
-  powershell -NoProfile -Command "$chars='abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; -join ((1..48) | ForEach-Object { $chars[(Get-Random -Maximum $chars.Length)] })" > "%SECRET_FILE%"
+  powershell -NoProfile -Command "$b=New-Object byte[] 36; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b) | Out-File -NoNewline -Encoding ascii '%SECRET_FILE%'"
+  icacls "%SECRET_FILE%" /inheritance:r /grant:r "%USERNAME%:(R,W)" >nul 2>&1
 )
 set /p APP_JWT_SECRET=<"%SECRET_FILE%"
 

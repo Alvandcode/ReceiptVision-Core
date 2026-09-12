@@ -114,10 +114,13 @@ mvn -B verify
 ## 🔒 حریم خصوصی (سخت‌گیرانه)
 
 - هر رسید `owner_id` دارد. کوئری‌ها فقط `findByOwner` هستند؛ هیچ `findAll` بدون مالک در کد نیست.
-- شناسه чужой → `404` (نه `403` با محتوا) تا اوراکل وجودی لو نرود. پیام لاگین اشتباه همیشه یکسان است (`401 Invalid username or password`) تا نام کاربری لو نرود.
-- رمزها `BCrypt(12)`، توکن `JWT HS256` با `APP_JWT_SECRET` ≥۳۲ بایت. لاگ‌ها هرگز `ocrText` چاپ نمی‌کنند.
-- فایل‌های قدیمی بدون مالک (`owner IS NULL`) در استارت‌آپ **حذف قطعی** می‌شوند (`OrphanReceiptPurgeRunner`) چون مالک قابل اثبات ندارند.
-- `H2 Console` پیش‌فرض `false`. بدون `Authorization: Bearer <jwt>` همه `/api/receipts` می‌شوند `401`.
+- شناسه чужой → `404` (نه `403` با محتوا) تا اوراکل وجودی لو نرود. پیام لاگین اشتباه همیشه یکسان است (`401 Invalid username or password`) تا نام کاربری لو نرود. نام تکراری در ثبت‌نام `409` می‌دهد و با ریت‌لیمیت ضد شمارش است.
+- نام کاربری به حروف کوچک نرمال می‌شود (`Ali` و `ali` یکی‌اند) تا جعل هویتی نشود. رمز ≥۸ حرف شامل **حرف+عدد**، هش `BCrypt(12)`.
+- توکن `JWT HS256` با `jti` + بلک‌لیست خروج (`POST /api/auth/logout`)، عمر پیش‌فرض `12h` (حداکثر `72h`). بدون `APP_JWT_SECRET` برنامه بالا نمی‌آید.
+- آپلود فقط تصویر واقعی (`ImageIO` + سقف ابعاد 8000 و ۵۰ مگاپیکسل)، سقف `10MB` و سهمیه `2000` رسید/کاربر، ریت‌لیمیت `20/min` برای auth و `30/min` برای آپلود.
+- لاگ‌ها هرگز `ocrText` و مسیر موقت چاپ نمی‌کنند؛ خطای OCR به کلاینت جنریک است (`422 OCR failed`).
+- فایل‌های قدیمی بدون مالک (`owner IS NULL`) در استارت‌آپ **حذف قطعی** می‌شوند (`OrphanReceiptPurgeRunner`) مگر `PURGE_ORPHANS=false` که فقط سرو را متوقف می‌کند.
+- `H2 Console` پیش‌فرض `false`. بدون `Authorization: Bearer <jwt>` همه `/api/receipts` می‌شوند `401`. هدرهای `CSP/HSTS/X-Frame-Deny` و `CORS` محدود به same-origin فعال‌اند.
 - برای پروداکشن حتماً پشت `HTTPS` (reverse proxy) بگذارید و `APP_JWT_SECRET` رندوم بدهید:
 ```bash
 export APP_JWT_SECRET="$(openssl rand -base64 48)"
@@ -152,7 +155,14 @@ curl -X POST http://localhost:8080/api/receipts \
 }
 ```
 
-محدودیت‌ها: فقط `image/jpeg,png,webp,tiff,bmp` • حداکثر `10MB` • فایل خالی و نام شامل `..` رد می‌شود (`400`) • خطای OCR می‌شود `422` • حجم بیش از حد می‌شود `413`.
+محدودیت‌ها: فقط `image/jpeg,png,webp,tiff,bmp` واقعی (magic-byte) • حداکثر `10MB` و ابعاد 8000 • فایل خالی و نام شامل `..` رد می‌شود (`400`) • تصویر غیرواقعی `400` • خطای OCR جنریک `422` • حجم بیش از حد `413` • احراز هویت زیاد `429` • فقط عکس متن ذخیره می‌شود (بایت تصویر نگه داشته نمی‌شود)، فیلد `sort` فقط `id,createdAt,fileName,size`.
+
+```bash
+# خروج (ابطال توکن جاری):
+curl -X POST http://localhost:8080/api/auth/logout \
+  -H "Authorization: Bearer $TOKEN" -i
+# 204 No Content
+```
 
 ### دریافت لیست رسیدهای خودم
 
@@ -188,8 +198,12 @@ curl -X DELETE http://localhost:8080/api/receipts/1 -H "Authorization: Bearer $T
 | `SPRING_DATASOURCE_USERNAME` | `sa` | یوزر دیتابیس |
 | `SPRING_DATASOURCE_PASSWORD` | `` (خالی) | در پروداکشن حتماً عوض کنید |
 | `H2_CONSOLE_ENABLED` | `false` | فقط برای dev موقتاً `true` کنید (با دیتای واقعی هرگز) |
-| `APP_JWT_SECRET` | — | **اجباری در پروداکشن**، ≥۳۲ بایت رندوم |
-| `JWT_EXPIRATION_HOURS` | `168` | عمر توکن |
+| `APP_JWT_SECRET` | — | **اجباری، بدون پیش‌فرض** — برنامه بدون آن بالا نمی‌آید (fail-closed)، ≥۳۲ بایت رندوم |
+| `JWT_EXPIRATION_HOURS` | `12` | عمر توکن (۱ تا ۷۲ ساعت). خروج با `POST /api/auth/logout` توکن را باطل می‌کند |
+| `RATELIMIT_AUTH_PER_MINUTE` | `20` | سقف درخواست احراز هویت در دقیقه (ضد بروت‌فورس) |
+| `RATELIMIT_UPLOAD_PER_MINUTE` | `30` | سقف آپلود OCR در دقیقه |
+| `MAX_RECEIPTS_PER_USER` | `2000` | سقف تعداد رسید هر کاربر (ضد اسپم دیتابیس) |
+| `PURGE_ORPHANS` | `true` | حذف ردیف‌های بدون مالک در استارت (`false` = نگه‌دار ولی سرو نکن) |
 | `OCR_LANGUAGES` | `fas+eng` | زبان‌های Tesseract |
 | `OCR_PSM` | `3` | Page segmentation mode |
 | `OCR_TIMEOUT_SECONDS` | `30` | تایم‌اوت OCR |

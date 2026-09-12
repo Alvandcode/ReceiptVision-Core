@@ -12,4 +12,10 @@ public interface UserRepository extends JpaRepository<AppUser, Long> {
     Optional<AppUser> findByUsername(String username);
 
     boolean existsByUsername(String username);
+
+    // Case-insensitive variants: usernames are stored lowercase (see AuthService.normalize),
+    // but legacy rows with uppercase must still resolve.
+    Optional<AppUser> findByUsernameIgnoreCase(String username);
+
+    boolean existsByUsernameIgnoreCase(String username);
 }

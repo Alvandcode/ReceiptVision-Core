@@ -26,6 +26,9 @@ jobs:
           tesseract --list-langs
 
       - name: Build and test
+        env:
+          APP_JWT_SECRET: test-secret-0123456789-abcdef-0123456789
+          JWT_EXPIRATION_HOURS: "1"
         run: mvn -B verify
 
       - name: Docker build smoke test

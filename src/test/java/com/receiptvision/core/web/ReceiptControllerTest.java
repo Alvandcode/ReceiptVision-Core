@@ -56,6 +56,12 @@ class ReceiptControllerTest {
     @MockBean
     private com.receiptvision.core.security.DatabaseUserDetailsService userDetailsService;
 
+    @MockBean
+    private com.receiptvision.core.security.TokenBlacklist tokenBlacklist;
+
+    @MockBean
+    private com.receiptvision.core.security.AuthRateLimitFilter rateLimitFilter;
+
     private AppUser user() {
         return new AppUser("ali", "hash");
     }

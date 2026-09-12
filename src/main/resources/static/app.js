@@ -9,10 +9,12 @@ const uploadMsg = $('uploadMsg'), ocrOut = $('ocrOut');
 const listEl = $('list'), listMsg = $('listMsg');
 const dialog = $('detailDialog'), dTitle = $('dTitle'), dBody = $('dBody');
 let selectedFile = null;
+let selectedFileUrl = null;
 let currentDetailId = null;
 let page = 0;
 const size = 10;
 let lastPage = false;
+let authBusy = false;
 
 const TOKEN_KEY = 'rv_token';
 const USER_KEY = 'rv_user';
@@ -41,19 +43,30 @@ function showAuth(show) {
 async function api(path, opts) {
   const res = await fetch(path, opts);
   if (res.status === 401) {
-    logout();
+    await logout(true);
     throw new Error('نشست منقضی شد، دوباره وارد شوید (401)');
+  }
+  if (res.status === 429) {
+    throw new Error('درخواست زیاد است، یک دقیقه صبر کنید (429)');
   }
   return res;
 }
 
+function validPassword(pw) {
+  return pw.length >= 8 && pw.length <= 100 && /[A-Za-z]/.test(pw) && /\d/.test(pw);
+}
+
 async function doAuth(mode) {
-  const username = usernameEl.value.trim();
+  if (authBusy) return;
+  const username = usernameEl.value.trim().toLowerCase();
   const password = passwordEl.value;
-  if (username.length < 3 || password.length < 8) {
-    setMsg(authMsg, 'نام کاربری ≥۳ و رمز ≥۸ حرف لازم است', 'err');
+  if (username.length < 3 || !validPassword(password)) {
+    setMsg(authMsg, 'نام کاربری ≥۳ (انگلیسی) و رمز ≥۸ حرف شامل حرف و عدد لازم است', 'err');
     return;
   }
+  authBusy = true;
+  $('loginBtn').disabled = true;
+  $('registerBtn').disabled = true;
   setMsg(authMsg, 'در حال ارسال…', '');
   try {
     const res = await fetch('/api/auth/' + mode, {
@@ -62,7 +75,10 @@ async function doAuth(mode) {
       body: JSON.stringify({ username, password }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || ('خطای ' + res.status));
+    if (!res.ok) {
+      if (res.status === 409) throw new Error('این نام کاربری قبلا گرفته شده (409)');
+      throw new Error(data.message || ('خطای ' + res.status));
+    }
     localStorage.setItem(TOKEN_KEY, data.token);
     localStorage.setItem(USER_KEY, data.username);
     passwordEl.value = '';
@@ -70,15 +86,42 @@ async function doAuth(mode) {
     enterApp();
   } catch (err) {
     setMsg(authMsg, err.message, 'err');
+  } finally {
+    authBusy = false;
+    $('loginBtn').disabled = false;
+    $('registerBtn').disabled = false;
   }
 }
 
-function logout() {
+async function logout(silent) {
+  const token = getToken();
+  if (token) {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token },
+      }).catch(() => {});
+    } catch { /* best-effort server revoke */ }
+  }
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  // Clear private list + revoke preview URL + clear offline caches of shell
+  // (receipt data itself is never cached, see sw.js).
+  if (selectedFileUrl) {
+    try { URL.revokeObjectURL(selectedFileUrl); } catch { /* ignore */ }
+    selectedFileUrl = null;
+  }
+  selectedFile = null;
+  if ('caches' in window) {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k.startsWith('rv-shell-')).map((k) => caches.delete(k)));
+    } catch { /* ignore */ }
+  }
   listEl.innerHTML = '';
   page = 0; lastPage = false;
-  showAuth(true);
+  if (!silent) showAuth(true);
+  else showAuth(true);
 }
 
 function enterApp() {
@@ -89,9 +132,13 @@ function enterApp() {
 
 $('loginBtn').addEventListener('click', () => doAuth('login'));
 $('registerBtn').addEventListener('click', () => doAuth('register'));
-logoutBtn.addEventListener('click', logout);
+logoutBtn.addEventListener('click', () => logout(false));
 
 function setFile(f) {
+  if (selectedFileUrl) {
+    try { URL.revokeObjectURL(selectedFileUrl); } catch { /* ignore */ }
+    selectedFileUrl = null;
+  }
   selectedFile = f;
   const ok = !!f;
   uploadBtn.disabled = !ok;
@@ -115,6 +162,7 @@ function setFile(f) {
   }
   setMsg(uploadMsg, f.name + ' (' + Math.round(f.size / 1024) + ' KB)', 'ok');
   const url = URL.createObjectURL(f);
+  selectedFileUrl = url;
   preview.src = url;
   preview.hidden = false;
 }

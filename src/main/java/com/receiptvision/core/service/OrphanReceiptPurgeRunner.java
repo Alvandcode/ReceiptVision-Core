@@ -20,14 +20,21 @@ public class OrphanReceiptPurgeRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(OrphanReceiptPurgeRunner.class);
 
     private final ReceiptRepository receipts;
+    private final boolean purgeEnabled;
 
-    public OrphanReceiptPurgeRunner(ReceiptRepository receipts) {
+    public OrphanReceiptPurgeRunner(ReceiptRepository receipts,
+            @org.springframework.beans.factory.annotation.Value("${app.purge-orphans:true}") boolean purgeEnabled) {
         this.receipts = receipts;
+        this.purgeEnabled = purgeEnabled;
     }
 
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
+        if (!purgeEnabled) {
+            log.warn("Privacy purge DISABLED via app.purge-orphans=false. Ownerless rows are kept but never served.");
+            return;
+        }
         int deleted = receipts.deleteOrphans();
         if (deleted > 0) {
             log.warn("Privacy purge: deleted {} ownerless legacy receipt(s). They had no verifiable owner.", deleted);

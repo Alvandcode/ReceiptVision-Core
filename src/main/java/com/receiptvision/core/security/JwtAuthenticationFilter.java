@@ -20,10 +20,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
+    private final TokenBlacklist tokenBlacklist;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserDetailsService userDetailsService) {
+    public JwtAuthenticationFilter(JwtService jwtService, UserDetailsService userDetailsService,
+            TokenBlacklist tokenBlacklist) {
         this.jwtService = jwtService;
         this.userDetailsService = userDetailsService;
+        this.tokenBlacklist = tokenBlacklist;
     }
 
     @Override
@@ -31,14 +34,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (header != null && header.startsWith("Bearer ")) {
-            String token = header.substring(7);
-            if (jwtService.isValid(token) && SecurityContextHolder.getContext().getAuthentication() == null) {
-                String username = jwtService.extractUsername(token);
-                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                        userDetails, null, userDetails.getAuthorities());
-                auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(auth);
+            String token = header.substring(7).trim();
+            if (!token.isEmpty() && SecurityContextHolder.getContext().getAuthentication() == null) {
+                try {
+                    // Single parse: verifies signature + expiry. Throws on invalid/expired.
+                    io.jsonwebtoken.Claims claims = jwtService.parseAndValidate(token);
+                    String jti = claims.getId();
+                    if (jti != null && tokenBlacklist.isRevoked(jti)) {
+                        // Revoked via /api/auth/logout: treat as anonymous, chain will 401.
+                        chain.doFilter(request, response);
+                        return;
+                    }
+                    String username = claims.getSubject();
+                    if (username != null && !username.isBlank()) {
+                        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                                userDetails, null, userDetails.getAuthorities());
+                        auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(auth);
+                    }
+                } catch (org.springframework.security.core.userdetails.UsernameNotFoundException e) {
+                    // User deleted after token issuance: stay anonymous -> 401 downstream.
+                    org.slf4j.LoggerFactory.getLogger(JwtAuthenticationFilter.class)
+                            .debug("JWT for deleted user rejected");
+                } catch (io.jsonwebtoken.JwtException | IllegalArgumentException e) {
+                    org.slf4j.LoggerFactory.getLogger(JwtAuthenticationFilter.class)
+                            .debug("Invalid JWT rejected: {}", e.getMessage());
+                }
             }
         }
         chain.doFilter(request, response);

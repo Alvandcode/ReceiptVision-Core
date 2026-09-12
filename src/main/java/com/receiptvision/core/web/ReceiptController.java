@@ -42,6 +42,9 @@ public class ReceiptController {
     }
 
     private AppUser currentUser(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new org.springframework.security.authentication.BadCredentialsException("Not authenticated");
+        }
         return authService.requireUser(authentication.getName());
     }
 
@@ -76,22 +79,32 @@ public class ReceiptController {
         receiptService.deleteById(currentUser(authentication), id);
     }
 
+    private static final java.util.Set<String> ALLOWED_SORT_FIELDS =
+            java.util.Set.of("id", "createdAt", "fileName", "size");
+
     private static Sort parseSort(String[] sort) {
         // Accepts "field,dir" e.g. "createdAt,desc" as either
         // ["createdAt","desc"] or a single ["createdAt,desc"]
         // (Spring binds defaultValue "id,desc" as one element).
+        // Only allow-listed fields: prevents PropertyReferenceException -> 500
+        // and sorting by sensitive/internal properties.
         try {
+            String field = "id";
+            String dir = "DESC";
             if (sort.length == 1 && sort[0].contains(",")) {
                 String[] parts = sort[0].split(",", 2);
-                return Sort.by(Sort.Direction.fromString(parts[1].strip()), parts[0].strip());
+                field = parts[0].strip();
+                dir = parts[1].strip();
+            } else if (sort.length == 2) {
+                field = sort[0].strip();
+                dir = sort[1].strip();
+            } else if (sort.length == 1) {
+                field = sort[0].strip();
             }
-            if (sort.length == 2) {
-                Sort.Direction dir = Sort.Direction.fromString(sort[1]);
-                return Sort.by(dir, sort[0]);
+            if (!ALLOWED_SORT_FIELDS.contains(field)) {
+                return Sort.by(Sort.Direction.DESC, "id");
             }
-            if (sort.length == 1) {
-                return Sort.by(Sort.Direction.DESC, sort[0]);
-            }
+            return Sort.by(Sort.Direction.fromString(dir), field);
         } catch (IllegalArgumentException ignored) {
             // fall through to default
         }

@@ -21,9 +21,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final com.receiptvision.core.security.JwtService jwtService;
+    private final com.receiptvision.core.security.TokenBlacklist tokenBlacklist;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService,
+            com.receiptvision.core.security.JwtService jwtService,
+            com.receiptvision.core.security.TokenBlacklist tokenBlacklist) {
         this.authService = authService;
+        this.jwtService = jwtService;
+        this.tokenBlacklist = tokenBlacklist;
     }
 
     @PostMapping("/register")
@@ -42,7 +48,32 @@ public class AuthController {
     @GetMapping("/me")
     @Operation(summary = "Current logged-in username (requires JWT)")
     public AuthResponse me(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new org.springframework.security.authentication.BadCredentialsException("Not authenticated");
+        }
         // Token is not re-issued here; client keeps using its stored JWT.
         return new AuthResponse(authentication.getName(), "", "Bearer");
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Revoke the current JWT (server-side denylist by jti)")
+    public void logout(jakarta.servlet.http.HttpServletRequest request) {
+        String header = request.getHeader(org.springframework.http.HttpHeaders.AUTHORIZATION);
+        if (header != null && header.startsWith("Bearer ")) {
+            String token = header.substring(7).trim();
+            if (!token.isEmpty()) {
+                try {
+                    io.jsonwebtoken.Claims claims = jwtService.parseAndValidate(token);
+                    String jti = claims.getId();
+                    java.util.Date exp = claims.getExpiration();
+                    long expMillis = exp != null ? exp.getTime()
+                            : System.currentTimeMillis() + jwtService.getExpirationMillis();
+                    tokenBlacklist.revoke(jti, expMillis);
+                } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ignored) {
+                    // Invalid/expired token: nothing to revoke, still return 204.
+                }
+            }
+        }
     }
 }

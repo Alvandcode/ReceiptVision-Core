@@ -32,4 +32,29 @@ class JwtServiceTest {
         assertThatThrownBy(() -> new JwtService("short", 1))
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void placeholderSecret_refused_failClosed() {
+        assertThatThrownBy(() -> new JwtService("change-me-in-production-min-32-chars-please", 12))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new JwtService("", 12))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new JwtService("   ", 12))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void expiryBounds_enforced() {
+        String secret = "test-secret-0123456789-abcdef-0123456789";
+        assertThatThrownBy(() -> new JwtService(secret, 0)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new JwtService(secret, 100)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void token_hasJti_singleParse() {
+        JwtService jwt = service();
+        String token = jwt.generateToken("ali");
+        assertThat(jwt.extractJti(token)).isNotBlank();
+        assertThat(jwt.parseAndValidate(token).getSubject()).isEqualTo("ali");
+    }
 }

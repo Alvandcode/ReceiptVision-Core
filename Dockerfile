@@ -1,5 +1,5 @@
 # ---------- Build stage ----------
-FROM maven:3.9.6-eclipse-temurin-17 AS build
+FROM maven:3.9.9-eclipse-temurin-17 AS build
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ COPY src ./src
 RUN mvn -B -DskipTests clean package
 
 # ---------- Runtime stage (pinned for reproducible builds) ----------
-FROM eclipse-temurin:17.0.11_9-jre
+FROM eclipse-temurin:17.0.13_11-jre
 
 # Install Tesseract + Persian + English language data.
 # --no-install-recommends keeps the image small.

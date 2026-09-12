@@ -45,23 +45,48 @@ class ReceiptServiceTest {
         sara = new AppUser("sara", "hash");
     }
 
+    // 1x1 transparent PNG (valid magic bytes for ImageIO validation).
+    private static MockMultipartFile validPng(String name) {
+        byte[] png = java.util.Base64.getDecoder().decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC");
+        return new MockMultipartFile("file", name, "image/png", png);
+    }
+
     @Test
     void store_savesUnderOwnerOnly() throws Exception {
         when(ocrService.getLanguages()).thenReturn("fas+eng");
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "receipt.jpg", "image/jpeg", new byte[]{1, 2, 3});
+        when(repository.countByOwner(ali)).thenReturn(0L);
+        MockMultipartFile file = validPng("receipt.png");
         when(ocrService.extractText(any(InputStream.class), any()))
                 .thenReturn("TOTAL 100");
 
-        Receipt saved = new Receipt(ali, "receipt.jpg", "image/jpeg", 3, "TOTAL 100", "fas+eng");
+        Receipt saved = new Receipt(ali, "receipt.png", "image/png", file.getSize(), "TOTAL 100", "fas+eng");
         when(repository.save(any(Receipt.class))).thenReturn(saved);
 
         ReceiptResponse response = service.store(ali, file);
 
-        assertThat(response.fileName()).isEqualTo("receipt.jpg");
+        assertThat(response.fileName()).isEqualTo("receipt.png");
         ArgumentCaptor<Receipt> captor = ArgumentCaptor.forClass(Receipt.class);
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getOwner()).isSameAs(ali);
+    }
+
+    @Test
+    void store_rejectsSpoofedContentType() {
+        MockMultipartFile fake = new MockMultipartFile(
+                "file", "fake.png", "image/png", new byte[]{1, 2, 3, 4, 5});
+        assertThatThrownBy(() -> service.store(ali, fake))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("readable image");
+    }
+
+    @Test
+    void store_enforcesQuota() {
+        when(repository.countByOwner(ali)).thenReturn(2000L);
+        MockMultipartFile file = validPng("receipt.png");
+        assertThatThrownBy(() -> service.store(ali, file))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("quota");
     }
 
     @Test

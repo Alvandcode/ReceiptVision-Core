@@ -10,5 +10,7 @@ public record AuthRequest(
         String username,
 
         @NotBlank @Size(min = 8, max = 100)
+        @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d).{8,100}$",
+                message = "Password must contain at least one letter and one digit")
         String password) {
 }
