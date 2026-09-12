@@ -12,7 +12,7 @@ COPY src ./src
 RUN mvn -B -DskipTests clean package
 
 # ---------- Runtime stage (pinned for reproducible builds) ----------
-FROM eclipse-temurin:17.0.13_11-jre
+FROM eclipse-temurin:17.0.20_8-jre
 
 # Install Tesseract + Persian + English language data.
 # --no-install-recommends keeps the image small.
