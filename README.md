@@ -33,11 +33,11 @@
 
 ## 📖 درباره‌ی پروژه
 
-ReceiptVision Core یک سرویس بک‌اند است که تصویر رسید را دریافت می‌کند، با استفاده از **Tesseract OCR** (داخل کانتینر، با دیتای فارسی `fas` و انگلیسی `eng`) متن آن را استخراج می‌کند و در دیتابیس H2 ذخیره می‌کند.
+ReceiptVision Core یک سرویس بک‌اند است که تصویر رسید را دریافت می‌کند، با استفاده از **Tesseract OCR** (داخل کانتینر، با دیتای فارسی `fas` و انگلیسی `eng`) متن آن را استخراج می‌کند و **فقط متن استخراج‌شده** را در دیتابیس H2 ذخیره می‌کند (خود عکس نگه داشته نمی‌شود).
 
-از این نسخه به بعد **دو حالت مصرف** دارد که هر دو از یک ایمیج Docker می‌آیند و API هیچ تغییری نکرده:
-- **👤 عادی:** `GET /` — صفحه فارسی drag&drop، پیش‌نمایش، نمایش متن، لیست/حذف. بدون `curl`.
-- **🧑‍💻 دولوپر:** `POST/GET /api/receipts` + `Swagger UI` + `Actuator`.
+از این نسخه به بعد **دو حالت مصرف** دارد که هر دو از یک ایمیج Docker می‌آیند:
+- **👤 عادی:** `GET /` — صفحه فارسی drag&drop، پیش‌نمایش، نمایش متن، لیست/حذف. بدون `curl`. ورود با کوکی امن (`HttpOnly`) و تمدید خودکار نشست.
+- **🧑‍💻 دولوپر:** `POST/GET /api/receipts` + `Swagger UI` + `Actuator` + احراز هویت با `Bearer` یا کوکی + رفرش‌توکن چرخشی (`POST /api/auth/refresh`).
 
 ## ✨ امکانات
 
@@ -46,7 +46,10 @@ ReceiptVision Core یک سرویس بک‌اند است که تصویر رسید
 - 💾 ذخیره‌سازی در H2 فایلی روی `/data` (persist با والیوم داکر)
 - 🐳 اجرای کامل با Docker / Compose، کاربر غیرروت، `HEALTHCHECK`
 - 🌐 مستندات تعاملی Swagger UI + Actuator health
-- ✅ ولیدیشن نوع/حجم فایل، هندلینگ خطای استاندارد، لیست صفحه‌بندی‌شده
+- ✅ ولیدیشن واقعی تصویر (magic-byte، سقف ابعاد و پیکسل)، هندلینگ خطای استاندارد، لیست صفحه‌بندی‌شده
+- 🔑 نشست امن: access کوتاه‌عمر (`2h`) + رفرش‌توکن چرخشی (`30d`)، کوکی `HttpOnly` برای وب و `Bearer` برای API، بلک‌لیست ماندگار خروج
+- 🛡️ ضد سوءاستفاده: ریت‌لیمیت لاگین/آپلود و سقف `2000` رسید برای هر کاربر
+- 💾 اسکریپت بکاپ آماده (`Backup-ReceiptVision.bat` و `backup-receiptvision.sh`)
 
 ---
 
@@ -64,20 +67,31 @@ git clone https://github.com/Alvandcode/ReceiptVision-Core.git
 cd ReceiptVision-Core
 ```
 
-**۲. اجرا با Compose (پیشنهادشده)**
+**۲. ساخت کلید امنیتی (فقط بار اول — بدون این، برنامه بالا نمی‌آید)**
+```bash
+# لینوکس/مک:
+export APP_JWT_SECRET="$(openssl rand -base64 48)"
+# ویندوز (PowerShell):
+$b = New-Object byte[] 36; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); $env:APP_JWT_SECRET = [Convert]::ToBase64String($b)
+```
+
+**۳. اجرا با Compose (پیشنهادشده)**
 ```bash
 docker compose up --build -d
 ```
 
-**۲′. اجرا بدون Compose**
+**۳′. اجرا بدون Compose**
 ```bash
 docker build -t receiptvision:0.1.0 .
-docker run -d --name receiptvision -p 8080:8080 -v receipt-data:/data receiptvision:0.1.0
+docker run -d --name receiptvision -p 8080:8080 -v receipt-data:/data \
+  -e APP_JWT_SECRET="$APP_JWT_SECRET" receiptvision:0.1.0
 ```
+
+> ویندوزی‌ها راحت‌ترین راه: بدون کلون و دستور، فقط `Start-ReceiptVision.bat` را از ریپو دانلود و دابل‌کلیک کنید (کلید را خودش می‌سازد). جزئیات در [USER-GUIDE-FA.md](USER-GUIDE-FA.md).
 
 > والیوم `receipt-data:/data` با `jdbc:h2:file:/data/receiptsdb` جفت شده و دیتا بعد از ری‌استارت باقی می‌ماند.
 
-**۳. دسترسی**
+**۴. دسترسی**
 
 | نسخه | سرویس | آدرس |
 |---|---|---|
@@ -87,10 +101,15 @@ docker run -d --name receiptvision -p 8080:8080 -v receipt-data:/data receiptvis
 | Health | http://localhost:8080/actuator/health |
 | کنسول H2 (فقط dev) | http://localhost:8080/h2-console |
 
-> H2 Console به‌صورت پیش‌فرض **خاموش** است (`H2_CONSOLE_ENABLED=false`). برای توسعه: `H2_CONSOLE_ENABLED=true docker compose up`.
+> H2 Console به‌صورت پیش‌فرض **خاموش** است (`H2_CONSOLE_ENABLED=false`). برای توسعه موقتاً (سکرت هم لازم است):
+> ```bash
+> export APP_JWT_SECRET="$(openssl rand -base64 48)"
+> H2_CONSOLE_ENABLED=true docker compose up
+> ```
 
-مشخصات اتصال H2 در حالت dev:
-`JDBC URL: jdbc:h2:file:/data/receiptsdb` • `User: sa` • `Password: (خالی، مگر با SPRING_DATASOURCE_PASSWORD عوضش کنید)`
+مشخصات اتصال H2:
+- حالت dev (پروفایل `dev`): دیتابیس موقت در حافظه — `JDBC URL: jdbc:h2:mem:receiptsdb` • `User: sa` • `Password:` خالی
+- حالت داکر: فایل روی والیوم — `JDBC URL: jdbc:h2:file:/data/receiptsdb` • `User: sa` • `Password:` خالی (مگر با `SPRING_DATASOURCE_PASSWORD` عوضش کنید)
 
 ---
 
@@ -114,7 +133,7 @@ mvn -B verify
 ## 🔒 حریم خصوصی (سخت‌گیرانه)
 
 - هر رسید `owner_id` دارد. کوئری‌ها فقط `findByOwner` هستند؛ هیچ `findAll` بدون مالک در کد نیست.
-- شناسه чужой → `404` (نه `403` با محتوا) تا اوراکل وجودی لو نرود. پیام لاگین اشتباه همیشه یکسان است (`401 Invalid username or password`) تا نام کاربری لو نرود. نام تکراری در ثبت‌نام `409` می‌دهد و با ریت‌لیمیت ضد شمارش است.
+- شناسه رسید دیگری → `404` (نه `403` با محتوا) تا لو نرود چه چیزی وجود دارد. پیام لاگین اشتباه همیشه یکسان است (`401 Invalid username or password`) تا نام کاربری لو نرود. نام تکراری در ثبت‌نام `409` می‌دهد و با ریت‌لیمیت ضد شمارش است.
 - نام کاربری به حروف کوچک نرمال می‌شود (`Ali` و `ali` یکی‌اند) تا جعل هویتی نشود. رمز ≥۸ حرف شامل **حرف+عدد**، هش `BCrypt(12)`.
 - توکن `JWT HS256` کوتاه‌عمر (`2h`) با `jti` + بلک‌لیست **ماندگار در DB** (ری‌استارت پاک نمی‌شود، purge ساعتی) + رفرش‌توکن opaque چرخشی (`30d`، هش SHA-256، reuse یعنی سرقت → ابطال همه نشست‌ها). بدون `APP_JWT_SECRET` برنامه بالا نمی‌آید.
 - آپلود فقط تصویر واقعی (`ImageIO` + سقف ابعاد 8000 و ۵۰ مگاپیکسل)، سقف `10MB` و سهمیه `2000` رسید/کاربر، ریت‌لیمیت `20/min` برای auth و `30/min` برای آپلود.
@@ -134,10 +153,13 @@ docker compose up --build -d
 ```bash
 curl -X POST http://localhost:8080/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"username":"ali_90","password":"S3curePass!"}'
-# -> {"username":"ali_90","token":"eyJ...","tokenType":"Bearer"}
+  -d '{"username":"ali_90","password":"S3curePass1"}'
+# -> {"username":"ali_90","token":"eyJ...","refreshToken":"...","tokenType":"Bearer"}
+# (مرورگر توکن‌ها را در کوکی HttpOnly می‌گیرد و لازم نیست جایی ذخیره‌شان کند)
+# قانون نام کاربری و رمز: انگلیسی ۳ تا ۳۲ حرف (`a-z 0-9 _ -`)، رمز ۸ تا ۱۰۰ حرف شامل حداقل یک حرف و یک عدد
 
 TOKEN=eyJ...
+REFRESH=...
 curl -X POST http://localhost:8080/api/receipts \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@/path/to/receipt.jpg"
@@ -157,14 +179,18 @@ curl -X POST http://localhost:8080/api/receipts \
 }
 ```
 
-محدودیت‌ها: فقط `image/jpeg,png,webp,tiff,bmp` واقعی (magic-byte) • حداکثر `10MB` و ابعاد 8000 • فایل خالی و نام شامل `..` رد می‌شود (`400`) • تصویر غیرواقعی `400` • خطای OCR جنریک `422` • حجم بیش از حد `413` • احراز هویت زیاد `429` • فقط عکس متن ذخیره می‌شود (بایت تصویر نگه داشته نمی‌شود)، فیلد `sort` فقط `id,createdAt,fileName,size`.
+محدودیت‌ها: فقط `image/jpeg,png,webp,tiff,bmp` واقعی (magic-byte) • حداکثر `10MB` و ابعاد 8000 • فایل خالی و نام شامل `..` رد می‌شود (`400`) • تصویر غیرواقعی `400` • نام کاربری تکراری `409` • خطای OCR جنریک `422` • حجم بیش از حد `413` • احراز هویت زیاد `429` • سهمیه هر کاربر `2000` رسید • فقط متن عکس ذخیره می‌شود (بایت تصویر نگه داشته نمی‌شود)، فیلد `sort` فقط `id,createdAt,fileName,size`.
 
 ```bash
-# تمدید نشست با کوکی (مرورگر خودکار می‌فرستد؛ برای API توکن را بدهید):
+# تمدید نشست (مرورگر با کوکی خودکار انجامش می‌دهد؛ برای API رفرش‌توکن را بدهید):
 curl -X POST http://localhost:8080/api/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{"refreshToken":"..."}'
-# -> access + refresh جدید (refresh قبلی باطل می‌شود)
+# -> access + refresh جدید (refresh قبلی باطل می‌شود؛ استفاده مجدد از refresh باطل‌شده همه نشست‌ها را می‌بندد)
+
+# مشاهده حساب جاری:
+curl http://localhost:8080/api/auth/me -H "Authorization: Bearer $TOKEN"
+# -> {"username":"ali_90","token":"","refreshToken":null,"tokenType":"Bearer"}
 
 # خروج (ابطال access + refresh + پاک‌سازی کوکی):
 curl -X POST http://localhost:8080/api/auth/logout \
@@ -214,6 +240,8 @@ curl -X DELETE http://localhost:8080/api/receipts/1 -H "Authorization: Bearer $T
 | `RATELIMIT_UPLOAD_PER_MINUTE` | `30` | سقف آپلود OCR در دقیقه |
 | `MAX_RECEIPTS_PER_USER` | `2000` | سقف تعداد رسید هر کاربر (ضد اسپم دیتابیس) |
 | `PURGE_ORPHANS` | `true` | حذف ردیف‌های بدون مالک در استارت (`false` = نگه‌دار ولی سرو نکن) |
+| `DDL_AUTO` | `update` | حالت Hibernate؛ در محیط سخت‌گیرانه `validate` بگذارید |
+| `PURGE_INTERVAL_MS` | `3600000` | فاصله پاک‌سازی توکن‌های منقضی (۱ ساعت) |
 | `OCR_LANGUAGES` | `fas+eng` | زبان‌های Tesseract |
 | `OCR_PSM` | `3` | Page segmentation mode |
 | `OCR_TIMEOUT_SECONDS` | `30` | تایم‌اوت OCR |
@@ -225,6 +253,10 @@ curl -X DELETE http://localhost:8080/api/receipts/1 -H "Authorization: Bearer $T
 
 | مشکل | علت محتمل / راه‌حل |
 |---|---|
+| `docker compose up` خطای `APP_JWT_SECRET` می‌دهد | عمدی است: بدون سکرت برنامه بالا نمی‌آید. اول قدم «۲. ساخت کلید امنیتی» همین راهنما را انجام دهید (لینوکس `export`، ویندوز PowerShell) یا از `Start-ReceiptVision.bat` استفاده کنید |
+| `401` وسط کار / «نشست منقضی شد» | access هر `2h` می‌میرد؛ مرورگر با رفرش‌توکن (۳۰ روزه) خودش تمدید می‌کند. با Curl باید `POST /api/auth/refresh` بزنید وگرنه دوباره لاگین کنید |
+| `409` موقع ثبت‌نام | نام کاربری گرفته شده؛ یکی دیگر انتخاب کنید |
+| `429 Too Many Requests` | ریت‌لیمیت (۲۰ لاگین یا ۳۰ آپلود در دقیقه)؛ یک دقیقه صبر کنید |
 | `docker build` خطای `COPY failed: pom.xml` | نسخه قدیمی ریپو بود؛ الان `pom.xml` موجود است. `git pull` کنید. |
 | دیتا بعد از ری‌استارت پاک می‌شود | حتماً `-v receipt-data:/data` یا Compose استفاده کنید؛ `SPRING_DATASOURCE_URL` را به `mem:` تغییر ندهید. |
 | فارسی خراب OCR می‌شود | ایمیج جدید `tesseract-ocr-fas` دارد؛ `docker compose up --build` بزنید و `OCR_LANGUAGES=fas+eng` باشد. |
@@ -235,7 +267,7 @@ curl -X DELETE http://localhost:8080/api/receipts/1 -H "Authorization: Bearer $T
 
 ## 🤝 مشارکت
 
-ایssue یا PR بفرستید. قبل از PR حتماً `mvn -B verify` سبز باشد.
+ایشو یا PR بفرستید. قبل از PR حتماً `mvn -B verify` سبز باشد.
 
 ---
 
