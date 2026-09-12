@@ -16,18 +16,27 @@ const size = 10;
 let lastPage = false;
 let authBusy = false;
 
-const TOKEN_KEY = 'rv_token';
 const USER_KEY = 'rv_user';
-const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
-const isLoggedIn = () => !!getToken();
+// One-time migration: drop legacy Bearer tokens from localStorage (XSS risk).
+// Auth now uses HttpOnly cookies (rv_at/rv_rt) set by the server.
+try { localStorage.removeItem('rv_token'); } catch { /* ignore */ }
+const isLoggedIn = () => !!localStorage.getItem(USER_KEY);
 
 function setMsg(el, text, kind) {
   el.textContent = text || '';
   el.className = 'msg' + (kind ? ' ' + kind : '');
 }
 
+// Same-origin cookie auth: browser sends rv_at automatically.
+// X-Requested-With doubles as CSRF AJAX marker for cookie writes.
 function authHeaders(extra) {
-  return Object.assign({ 'Authorization': 'Bearer ' + getToken() }, extra || {});
+  return Object.assign({ 'X-Requested-With': 'XMLHttpRequest' }, extra || {});
+}
+
+function apiFetch(path, opts) {
+  const merged = Object.assign({ credentials: 'include' }, opts || {});
+  merged.headers = authHeaders(merged.headers);
+  return fetch(path, merged);
 }
 
 function showAuth(show) {
@@ -40,8 +49,38 @@ function showAuth(show) {
   }
 }
 
-async function api(path, opts) {
-  const res = await fetch(path, opts);
+let refreshInFlight = null;
+async function tryRefresh() {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          credentials: 'include',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: '{}',
+        });
+        return res.ok;
+      } catch {
+        return false;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return refreshInFlight;
+}
+
+async function api(path, opts, retried) {
+  const res = await apiFetch(path, opts);
+  if (res.status === 401 && !retried) {
+    // Access expired (2h): try silent refresh once with rv_rt cookie.
+    if (await tryRefresh()) {
+      return api(path, opts, true);
+    }
+    await logout(true);
+    throw new Error('نشست منقضی شد، دوباره وارد شوید (401)');
+  }
   if (res.status === 401) {
     await logout(true);
     throw new Error('نشست منقضی شد، دوباره وارد شوید (401)');
@@ -71,7 +110,8 @@ async function doAuth(mode) {
   try {
     const res = await fetch('/api/auth/' + mode, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
       body: JSON.stringify({ username, password }),
     });
     const data = await res.json().catch(() => ({}));
@@ -79,8 +119,8 @@ async function doAuth(mode) {
       if (res.status === 409) throw new Error('این نام کاربری قبلا گرفته شده (409)');
       throw new Error(data.message || ('خطای ' + res.status));
     }
-    localStorage.setItem(TOKEN_KEY, data.token);
-    localStorage.setItem(USER_KEY, data.username);
+    // Tokens live in HttpOnly cookies now (never in JS). Keep only username for UI.
+    localStorage.setItem(USER_KEY, data.username || username);
     passwordEl.value = '';
     setMsg(authMsg, '', '');
     enterApp();
@@ -94,17 +134,16 @@ async function doAuth(mode) {
 }
 
 async function logout(silent) {
-  const token = getToken();
-  if (token) {
-    try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token },
-      }).catch(() => {});
-    } catch { /* best-effort server revoke */ }
-  }
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: '{}',
+    }).catch(() => {});
+  } catch { /* best-effort server revoke */ }
+  try { localStorage.removeItem(USER_KEY); } catch { /* ignore */ }
+  try { localStorage.removeItem('rv_token'); } catch { /* ignore */ }
   // Clear private list + revoke preview URL + clear offline caches of shell
   // (receipt data itself is never cached, see sw.js).
   if (selectedFileUrl) {
@@ -279,9 +318,36 @@ async function checkHealth() {
   }
 }
 
-// Init: force login gate — nothing private is fetched before JWT exists.
-if (isLoggedIn()) enterApp();
-else showAuth(true);
+// Init: verify cookie session with /me (cookies are HttpOnly, JS can't read
+// them, so a stored username alone proves nothing). Nothing private is
+// fetched before the session is confirmed.
+async function boot() {
+  showAuth(true);
+  if (isLoggedIn()) {
+    try {
+      const res = await apiFetch('/api/auth/me', { headers: authHeaders() });
+      if (res.ok) {
+        const me = await res.json().catch(() => ({}));
+        if (me.username) localStorage.setItem(USER_KEY, me.username);
+        enterApp();
+        return;
+      }
+      if (!(await tryRefresh())) {
+        await logout(true);
+        return;
+      }
+      const retry = await apiFetch('/api/auth/me', { headers: authHeaders() });
+      if (retry.ok) {
+        enterApp();
+        return;
+      }
+      await logout(true);
+    } catch {
+      showAuth(true);
+    }
+  }
+}
+boot();
 checkHealth();
 setInterval(checkHealth, 30000);
 

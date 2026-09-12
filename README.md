@@ -116,11 +116,13 @@ mvn -B verify
 - هر رسید `owner_id` دارد. کوئری‌ها فقط `findByOwner` هستند؛ هیچ `findAll` بدون مالک در کد نیست.
 - شناسه чужой → `404` (نه `403` با محتوا) تا اوراکل وجودی لو نرود. پیام لاگین اشتباه همیشه یکسان است (`401 Invalid username or password`) تا نام کاربری لو نرود. نام تکراری در ثبت‌نام `409` می‌دهد و با ریت‌لیمیت ضد شمارش است.
 - نام کاربری به حروف کوچک نرمال می‌شود (`Ali` و `ali` یکی‌اند) تا جعل هویتی نشود. رمز ≥۸ حرف شامل **حرف+عدد**، هش `BCrypt(12)`.
-- توکن `JWT HS256` با `jti` + بلک‌لیست خروج (`POST /api/auth/logout`)، عمر پیش‌فرض `12h` (حداکثر `72h`). بدون `APP_JWT_SECRET` برنامه بالا نمی‌آید.
+- توکن `JWT HS256` کوتاه‌عمر (`2h`) با `jti` + بلک‌لیست **ماندگار در DB** (ری‌استارت پاک نمی‌شود، purge ساعتی) + رفرش‌توکن opaque چرخشی (`30d`، هش SHA-256، reuse یعنی سرقت → ابطال همه نشست‌ها). بدون `APP_JWT_SECRET` برنامه بالا نمی‌آید.
 - آپلود فقط تصویر واقعی (`ImageIO` + سقف ابعاد 8000 و ۵۰ مگاپیکسل)، سقف `10MB` و سهمیه `2000` رسید/کاربر، ریت‌لیمیت `20/min` برای auth و `30/min` برای آپلود.
 - لاگ‌ها هرگز `ocrText` و مسیر موقت چاپ نمی‌کنند؛ خطای OCR به کلاینت جنریک است (`422 OCR failed`).
 - فایل‌های قدیمی بدون مالک (`owner IS NULL`) در استارت‌آپ **حذف قطعی** می‌شوند (`OrphanReceiptPurgeRunner`) مگر `PURGE_ORPHANS=false` که فقط سرو را متوقف می‌کند.
-- `H2 Console` پیش‌فرض `false`. بدون `Authorization: Bearer <jwt>` همه `/api/receipts` می‌شوند `401`. هدرهای `CSP/HSTS/X-Frame-Deny` و `CORS` محدود به same-origin فعال‌اند.
+- وب‌UI با کوکی `HttpOnly` (`rv_at`/`rv_rt`، `SameSite=Strict`) کار می‌کند — توکن در `localStorage` نیست (مقاوم در برابر XSS). API/Curl همچنان `Authorization: Bearer` قبول می‌کند. درخواست کوکیِ تغییردهنده نیاز به هدر `X-Requested-With` یا هم‌مبدا بودن دارد.
+- `H2 Console` پیش‌فرض `false`. بدون نشست معتبر همه `/api/receipts` می‌شوند `401`. هدرهای `CSP/HSTS/X-Frame-Deny` و `CORS` محدود به same-origin فعال‌اند.
+- بکاپ: `Backup-ReceiptVision.bat` (ویندوز) یا `sh backup-receiptvision.sh` (لینوکس) — والیوم `receipt-data` و پوشه `data/` را فشرده در `backups/` می‌گذارد. قبل هر آپدیت بکاپ بگیر.
 - برای پروداکشن حتماً پشت `HTTPS` (reverse proxy) بگذارید و `APP_JWT_SECRET` رندوم بدهید:
 ```bash
 export APP_JWT_SECRET="$(openssl rand -base64 48)"
@@ -158,7 +160,13 @@ curl -X POST http://localhost:8080/api/receipts \
 محدودیت‌ها: فقط `image/jpeg,png,webp,tiff,bmp` واقعی (magic-byte) • حداکثر `10MB` و ابعاد 8000 • فایل خالی و نام شامل `..` رد می‌شود (`400`) • تصویر غیرواقعی `400` • خطای OCR جنریک `422` • حجم بیش از حد `413` • احراز هویت زیاد `429` • فقط عکس متن ذخیره می‌شود (بایت تصویر نگه داشته نمی‌شود)، فیلد `sort` فقط `id,createdAt,fileName,size`.
 
 ```bash
-# خروج (ابطال توکن جاری):
+# تمدید نشست با کوکی (مرورگر خودکار می‌فرستد؛ برای API توکن را بدهید):
+curl -X POST http://localhost:8080/api/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"..."}'
+# -> access + refresh جدید (refresh قبلی باطل می‌شود)
+
+# خروج (ابطال access + refresh + پاک‌سازی کوکی):
 curl -X POST http://localhost:8080/api/auth/logout \
   -H "Authorization: Bearer $TOKEN" -i
 # 204 No Content
@@ -199,7 +207,9 @@ curl -X DELETE http://localhost:8080/api/receipts/1 -H "Authorization: Bearer $T
 | `SPRING_DATASOURCE_PASSWORD` | `` (خالی) | در پروداکشن حتماً عوض کنید |
 | `H2_CONSOLE_ENABLED` | `false` | فقط برای dev موقتاً `true` کنید (با دیتای واقعی هرگز) |
 | `APP_JWT_SECRET` | — | **اجباری، بدون پیش‌فرض** — برنامه بدون آن بالا نمی‌آید (fail-closed)، ≥۳۲ بایت رندوم |
-| `JWT_EXPIRATION_HOURS` | `12` | عمر توکن (۱ تا ۷۲ ساعت). خروج با `POST /api/auth/logout` توکن را باطل می‌کند |
+| `JWT_EXPIRATION_HOURS` | `2` | عمر access توکن (۱ تا ۲۴ ساعت). نشست طولانی با رفرش‌توکن (۳۰ روزه) تمدید می‌شود |
+| `REFRESH_DAYS` | `30` | عمر رفرش‌توکن opaque (۱ تا ۹۰ روز، چرخشی) |
+| `COOKIE_SECURE` | `false` | در پروداکشن HTTPS حتما `true` (کوکی فقط روی TLS) |
 | `RATELIMIT_AUTH_PER_MINUTE` | `20` | سقف درخواست احراز هویت در دقیقه (ضد بروت‌فورس) |
 | `RATELIMIT_UPLOAD_PER_MINUTE` | `30` | سقف آپلود OCR در دقیقه |
 | `MAX_RECEIPTS_PER_USER` | `2000` | سقف تعداد رسید هر کاربر (ضد اسپم دیتابیس) |

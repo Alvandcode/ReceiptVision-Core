@@ -19,6 +19,10 @@ services:
       SPRING_DATASOURCE_URL: "jdbc:h2:file:/data/receiptsdb;DB_CLOSE_ON_EXIT=FALSE;DB_CLOSE_DELAY=-1;AUTO_SERVER=FALSE"
       H2_CONSOLE_ENABLED: "false"
       OCR_LANGUAGES: "fas+eng"
+      JWT_EXPIRATION_HOURS: "${JWT_EXPIRATION_HOURS:-2}"
+      REFRESH_DAYS: "${REFRESH_DAYS:-30}"
+      # HTTPS via Caddy: cookies must be Secure.
+      COOKIE_SECURE: "true"
       APP_JWT_SECRET: "${APP_JWT_SECRET:?Set APP_JWT_SECRET env (openssl rand -base64 48)}"
       JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
     volumes:

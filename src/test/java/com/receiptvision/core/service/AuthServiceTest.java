@@ -72,4 +72,69 @@ class AuthServiceTest {
         when(users.findByUsernameIgnoreCase("ali")).thenReturn(Optional.of(ali));
         assertThat(service.requireUser("ALI")).isSameAs(ali);
     }
+
+    @Test
+    void register_issuesRefreshToken_whenRepositoryPresent() {
+        com.receiptvision.core.repository.RefreshTokenRepository rt =
+                org.mockito.Mockito.mock(com.receiptvision.core.repository.RefreshTokenRepository.class);
+        AuthService svc = new AuthService(users, rt, encoder, authManager, jwtService, 30L);
+        when(users.existsByUsernameIgnoreCase("ali")).thenReturn(false);
+        when(users.existsByUsername("ali")).thenReturn(false);
+        when(encoder.encode("Pass1234")).thenReturn("hash");
+        when(users.save(any(AppUser.class))).thenAnswer(i -> i.getArgument(0));
+        when(jwtService.generateToken("ali")).thenReturn("access-tok");
+
+        var res = svc.register(new AuthRequest("ali", "Pass1234"));
+        assertThat(res.token()).isEqualTo("access-tok");
+        assertThat(res.refreshToken()).isNotBlank();
+        org.mockito.Mockito.verify(rt).save(any(com.receiptvision.core.domain.RefreshToken.class));
+    }
+
+    @Test
+    void refresh_rotatesTokens() {
+        com.receiptvision.core.repository.RefreshTokenRepository rt =
+                org.mockito.Mockito.mock(com.receiptvision.core.repository.RefreshTokenRepository.class);
+        AuthService svc = new AuthService(users, rt, encoder, authManager, jwtService, 30L);
+        AppUser ali = new AppUser("ali", "hash");
+        String raw = "refresh-raw-token-value-1234567890";
+        String hash = AuthService.sha256Hex(raw);
+        com.receiptvision.core.domain.RefreshToken row =
+                new com.receiptvision.core.domain.RefreshToken(ali, hash,
+                        java.time.Instant.now().plus(1, java.time.temporal.ChronoUnit.DAYS));
+        when(rt.findByTokenHash(hash)).thenReturn(Optional.of(row));
+        when(jwtService.generateToken("ali")).thenReturn("new-access");
+
+        var res = svc.refresh(raw);
+        assertThat(res.token()).isEqualTo("new-access");
+        assertThat(res.refreshToken()).isNotBlank().isNotEqualTo(raw);
+        assertThat(row.isRevoked()).isTrue();
+    }
+
+    @Test
+    void refresh_rejectsUnknownToken() {
+        com.receiptvision.core.repository.RefreshTokenRepository rt =
+                org.mockito.Mockito.mock(com.receiptvision.core.repository.RefreshTokenRepository.class);
+        AuthService svc = new AuthService(users, rt, encoder, authManager, jwtService, 30L);
+        when(rt.findByTokenHash(any())).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> svc.refresh("nope"))
+                .isInstanceOf(org.springframework.security.authentication.BadCredentialsException.class);
+    }
+
+    @Test
+    void refresh_reuseRevoked_revokesAll() {
+        com.receiptvision.core.repository.RefreshTokenRepository rt =
+                org.mockito.Mockito.mock(com.receiptvision.core.repository.RefreshTokenRepository.class);
+        AuthService svc = new AuthService(users, rt, encoder, authManager, jwtService, 30L);
+        AppUser ali = new AppUser("ali", "hash");
+        String raw = "reused-token";
+        String hash = AuthService.sha256Hex(raw);
+        com.receiptvision.core.domain.RefreshToken row =
+                new com.receiptvision.core.domain.RefreshToken(ali, hash,
+                        java.time.Instant.now().plus(1, java.time.temporal.ChronoUnit.DAYS));
+        row.setRevoked(true);
+        when(rt.findByTokenHash(hash)).thenReturn(Optional.of(row));
+        assertThatThrownBy(() -> svc.refresh(raw))
+                .isInstanceOf(org.springframework.security.authentication.BadCredentialsException.class);
+        org.mockito.Mockito.verify(rt).revokeAllForOwner(ali);
+    }
 }

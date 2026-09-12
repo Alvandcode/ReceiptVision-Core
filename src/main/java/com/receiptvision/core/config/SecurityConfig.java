@@ -60,9 +60,11 @@ public class SecurityConfig {
                         .requestMatchers("/", "/index.html", "/app.js", "/styles.css", "/favicon.ico",
                                 "/manifest.webmanifest", "/sw.js", "/icon-192.png", "/icon-512.png").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
-                        // Only register/login are public. /me and /logout need JWT.
-                        .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
-                        .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
+                        // Only register/login/refresh/logout are public (refresh/logout use
+                        // HttpOnly cookies and must work without a valid access JWT).
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login",
+                                "/api/auth/refresh", "/api/auth/logout").permitAll()
+                        .requestMatchers("/api/auth/me").authenticated()
                         .requestMatchers("/api/auth/**").authenticated()
                         // Swagger is public for discovery, but every /api/receipts call still needs JWT
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
@@ -81,7 +83,7 @@ public class SecurityConfig {
         // Same-origin only: UI and API share the origin, so no cross-origin allowlist.
         config.setAllowedOrigins(java.util.List.of());
         config.setAllowedMethods(java.util.List.of("GET", "POST", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type"));
+        config.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type", "X-Requested-With"));
         config.setAllowCredentials(false);
         config.setMaxAge(3600L);
         org.springframework.web.cors.UrlBasedCorsConfigurationSource source =

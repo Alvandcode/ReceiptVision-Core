@@ -13,3 +13,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # Runtime must stay on Java 17 (project baseline). Never auto-jump major JDK.
+      - dependency-name: "maven"
+        versions: [">= 3.9.10-eclipse-temurin-18"]
+      - dependency-name: "eclipse-temurin"
+        versions: [">= 18"]

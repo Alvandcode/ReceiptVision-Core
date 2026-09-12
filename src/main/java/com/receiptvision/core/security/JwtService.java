@@ -26,7 +26,7 @@ public class JwtService {
 
     public JwtService(
             @Value("${app.jwt.secret:}") String secret,
-            @Value("${app.jwt.expiration-hours:12}") long expirationHours) {
+            @Value("${app.jwt.expiration-hours:2}") long expirationHours) {
         if (secret == null || secret.isBlank()
                 || INSECURE_PLACEHOLDER.equals(secret.trim())
                 || secret.toLowerCase().contains("change-me")) {
@@ -38,9 +38,10 @@ public class JwtService {
             throw new IllegalStateException(
                     "app.jwt.secret must be at least 32 bytes. Set APP_JWT_SECRET env in production.");
         }
-        if (expirationHours <= 0 || expirationHours > 72) {
+        if (expirationHours <= 0 || expirationHours > 24) {
             throw new IllegalStateException(
-                    "app.jwt.expiration-hours must be between 1 and 72 (was " + expirationHours + ").");
+                    "app.jwt.expiration-hours must be between 1 and 24 (was " + expirationHours + "). "
+                            + "Use refresh tokens for long sessions.");
         }
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expirationMillis = expirationHours * 3_600_000L;
