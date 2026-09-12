@@ -33,6 +33,9 @@ jobs:
           cache: maven
 
       - name: Build jar (runs all tests)
+        env:
+          APP_JWT_SECRET: test-secret-0123456789-abcdef-0123456789
+          JWT_EXPIRATION_HOURS: "1"
         run: mvn -B verify
 
       - name: Download portable JRE 17
@@ -47,11 +50,29 @@ jobs:
       - name: Get portable Tesseract + Persian data
         shell: pwsh
         run: |
-          choco install tesseract --no-progress -y
+          $ErrorActionPreference = 'Stop'
+          if (!(Test-Path 'C:\Program Files\Tesseract-OCR\tesseract.exe')) {
+            choco install tesseract --no-progress -y --retry-autorecovery
+          }
           New-Item -ItemType Directory -Force tesseract | Out-Null
-          Copy-Item "C:\Program Files\Tesseract-OCR\tesseract.exe" tesseract\
-          Copy-Item -Recurse "C:\Program Files\Tesseract-OCR\tessdata" tesseract\
-          curl.exe -L -o tesseract\tessdata\fas.traineddata "https://github.com/tesseract-ocr/tessdata_fast/raw/main/fas.traineddata"
+          Copy-Item 'C:\Program Files\Tesseract-OCR\tesseract.exe' tesseract\
+          Copy-Item -Recurse 'C:\Program Files\Tesseract-OCR\tessdata' tesseract\
+          # Retry download (transient GitHub/choco network failures broke v0.2.3 build).
+          $urls = @(
+            'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/fas.traineddata',
+            'https://github.com/tesseract-ocr/tessdata_fast/raw/main/fas.traineddata'
+          )
+          $ok = $false
+          foreach ($u in $urls) {
+            for ($i = 1; $i -le 3 -and -not $ok; $i++) {
+              try {
+                curl.exe -L --retry 3 --connect-timeout 30 -o tesseract\tessdata\fas.traineddata $u
+                if ((Get-Item tesseract\tessdata\fas.traineddata).Length -gt 100000) { $ok = $true }
+              } catch { Start-Sleep -Seconds (5 * $i) }
+            }
+            if ($ok) { break }
+          }
+          if (-not $ok) { throw 'fas.traineddata download failed after retries' }
           .\tesseract\tesseract.exe --list-langs
 
       - name: Assemble package
