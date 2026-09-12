@@ -52,7 +52,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           if (!(Test-Path 'C:\Program Files\Tesseract-OCR\tesseract.exe')) {
-            choco install tesseract --no-progress -y --retry-autorecovery
+            choco install tesseract --no-progress -y
+            if ($LASTEXITCODE -ne 0) { throw "choco install tesseract failed with exit $LASTEXITCODE" }
           }
           New-Item -ItemType Directory -Force tesseract | Out-Null
           Copy-Item 'C:\Program Files\Tesseract-OCR\tesseract.exe' tesseract\
