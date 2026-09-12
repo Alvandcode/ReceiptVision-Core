@@ -52,30 +52,59 @@ jobs:
       - name: Get portable Tesseract + Persian data
         shell: pwsh
         run: |
-          # Primary: choco (green on v0.2.0-0.2.2). Fallback: winget (official
-          # UB-Mannheim package) if choco feed/exe is unavailable on the runner.
-          # NOTE: no $ErrorActionPreference='Stop' here on purpose: choco/curl
-          # write progress to stderr, which PS7 treats as fatal under Stop.
+          # Three independent install mechanisms: choco (green v0.2.0-0.2.2),
+          # winget (official UB-Mannheim package), direct EXE silent install.
+          # First one that yields tesseract.exe wins. Breadcrumbs via Write-Output
+          # so the failing part is visible in logs without guesswork.
           $tessExe = 'C:\Program Files\Tesseract-OCR\tesseract.exe'
-          if (!(Test-Path $tessExe)) {
-            if (Get-Command choco -ErrorAction SilentlyContinue) {
-              choco install tesseract --no-progress -y
+          function Find-Tesseract {
+            foreach ($p in @(
+              'C:\Program Files\Tesseract-OCR\tesseract.exe',
+              'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe')) {
+              if (Test-Path $p) { return $p }
             }
+            $hit = Get-ChildItem -Path "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" `
+              -Filter 'tesseract.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($hit) { return $hit.FullName }
+            return $null
           }
-          if (!(Test-Path $tessExe)) {
-            if (Get-Command winget -ErrorAction SilentlyContinue) {
-              winget install -e --id UB-Mannheim.TesseractOCR --silent `
-                --accept-package-agreements --accept-source-agreements
-            }
+          $found = Find-Tesseract
+          if (-not $found -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+            Write-Output 'Trying choco install tesseract...'
+            choco install tesseract --no-progress -y
+            $found = Find-Tesseract
           }
-          if (!(Test-Path $tessExe)) {
-            throw 'tesseract.exe not found after choco+winget install attempts'
+          if (-not $found -and (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Output 'Trying winget UB-Mannheim.TesseractOCR...'
+            winget install -e --id UB-Mannheim.TesseractOCR --silent `
+              --accept-package-agreements --accept-source-agreements
+            $found = Find-Tesseract
           }
+          if (-not $found) {
+            Write-Output 'Trying direct UB-Mannheim EXE silent install...'
+            $exeUrl = 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe'
+            curl.exe -sSL --retry 3 --connect-timeout 30 -o tess-setup.exe $exeUrl
+            Start-Process -FilePath '.\tess-setup.exe' -ArgumentList '/S' -Wait
+            Start-Sleep -Seconds 10
+            $found = Find-Tesseract
+          }
+          if (-not $found) { throw 'tesseract.exe not found after choco+winget+direct attempts' }
+          Write-Output "Found tesseract at: $found"
+          $tessDir = Split-Path $found
           New-Item -ItemType Directory -Force tesseract | Out-Null
-          Copy-Item "C:\Program Files\Tesseract-OCR\tesseract.exe" tesseract\
-          Copy-Item -Recurse "C:\Program Files\Tesseract-OCR\tessdata" tesseract\
-          curl.exe -L -o tesseract\tessdata\fas.traineddata "https://github.com/tesseract-ocr/tessdata_fast/raw/main/fas.traineddata"
-          if ((Get-Item tesseract\tessdata\fas.traineddata).Length -lt 100000) {
+          Copy-Item (Join-Path $tessDir 'tesseract.exe') tesseract\
+          Copy-Item -Recurse (Join-Path $tessDir 'tessdata') tesseract\
+          curl.exe -sSL --retry 3 --connect-timeout 30 `
+            -o tesseract\tessdata\fas.traineddata `
+            'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/fas.traineddata'
+          if (!(Test-Path tesseract\tessdata\fas.traineddata) `
+            -or ((Get-Item tesseract\tessdata\fas.traineddata).Length -lt 100000)) {
+            curl.exe -sSL --retry 3 --connect-timeout 30 `
+              -o tesseract\tessdata\fas.traineddata `
+              'https://github.com/tesseract-ocr/tessdata_fast/raw/main/fas.traineddata'
+          }
+          if (!(Test-Path tesseract\tessdata\fas.traineddata) `
+            -or ((Get-Item tesseract\tessdata\fas.traineddata).Length -lt 100000)) {
             throw 'fas.traineddata download looks incomplete'
           }
           .\tesseract\tesseract.exe --list-langs
