@@ -29,13 +29,11 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(ReceiptController.class)
-// Security filters OFF for controller-logic tests: @WithMockUser still fills
-// the SecurityContext so `Authentication` resolves. The 401/deny-all behavior
-// of the real chain (SecurityConfig + JwtAuthenticationFilter) is declarative
-// Spring Security and covered by code review, not by MockMvc here.
+@WebMvcTest(controllers = ReceiptController.class,
+        excludeAutoConfiguration = {
+                org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration.class })
 @AutoConfigureMockMvc(addFilters = false)
-@Import({GlobalExceptionHandler.class})
+@Import({ GlobalExceptionHandler.class })
 class ReceiptControllerTest {
 
     @Autowired
@@ -59,8 +57,10 @@ class ReceiptControllerTest {
     @MockBean
     private com.receiptvision.core.security.TokenBlacklist tokenBlacklist;
 
-    @MockBean
-    private com.receiptvision.core.security.AuthRateLimitFilter rateLimitFilter;
+    // AuthRateLimitFilter is a servlet Filter with only @Value deps: the real
+    // bean is harmless in this slice (addFilters=false never runs it), so no
+    // mock is needed. (A Mockito mock of OncePerRequestFilter would NOT call
+    // the chain by default and could break requests if filters were enabled.)
 
     private AppUser user() {
         return new AppUser("ali", "hash");

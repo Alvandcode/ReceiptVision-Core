@@ -48,6 +48,10 @@ public class AuthController {
     @GetMapping("/me")
     @Operation(summary = "Current logged-in username (requires JWT)")
     public AuthResponse me(Authentication authentication) {
+        if (authentication == null) {
+            authentication = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+        }
         if (authentication == null || authentication.getName() == null) {
             throw new org.springframework.security.authentication.BadCredentialsException("Not authenticated");
         }

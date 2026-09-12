@@ -42,6 +42,13 @@ public class ReceiptController {
     }
 
     private AppUser currentUser(Authentication authentication) {
+        // Robust: in @WebMvcTest slices the Authentication argument resolver may
+        // not be registered (yields null) while SecurityContextHolder still holds
+        // the @WithMockUser principal. Fall back to the holder.
+        if (authentication == null) {
+            authentication = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+        }
         if (authentication == null || authentication.getName() == null) {
             throw new org.springframework.security.authentication.BadCredentialsException("Not authenticated");
         }
