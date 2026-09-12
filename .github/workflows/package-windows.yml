@@ -52,11 +52,32 @@ jobs:
       - name: Get portable Tesseract + Persian data
         shell: pwsh
         run: |
-          choco install tesseract --no-progress -y
+          # Primary: choco (green on v0.2.0-0.2.2). Fallback: winget (official
+          # UB-Mannheim package) if choco feed/exe is unavailable on the runner.
+          # NOTE: no $ErrorActionPreference='Stop' here on purpose: choco/curl
+          # write progress to stderr, which PS7 treats as fatal under Stop.
+          $tessExe = 'C:\Program Files\Tesseract-OCR\tesseract.exe'
+          if (!(Test-Path $tessExe)) {
+            if (Get-Command choco -ErrorAction SilentlyContinue) {
+              choco install tesseract --no-progress -y
+            }
+          }
+          if (!(Test-Path $tessExe)) {
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+              winget install -e --id UB-Mannheim.TesseractOCR --silent `
+                --accept-package-agreements --accept-source-agreements
+            }
+          }
+          if (!(Test-Path $tessExe)) {
+            throw 'tesseract.exe not found after choco+winget install attempts'
+          }
           New-Item -ItemType Directory -Force tesseract | Out-Null
           Copy-Item "C:\Program Files\Tesseract-OCR\tesseract.exe" tesseract\
           Copy-Item -Recurse "C:\Program Files\Tesseract-OCR\tessdata" tesseract\
           curl.exe -L -o tesseract\tessdata\fas.traineddata "https://github.com/tesseract-ocr/tessdata_fast/raw/main/fas.traineddata"
+          if ((Get-Item tesseract\tessdata\fas.traineddata).Length -lt 100000) {
+            throw 'fas.traineddata download looks incomplete'
+          }
           .\tesseract\tesseract.exe --list-langs
 
       - name: Assemble package
