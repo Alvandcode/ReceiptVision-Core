@@ -43,7 +43,7 @@ jobs:
       - name: Download portable JRE 17
         shell: pwsh
         run: |
-          curl.exe -L -o jre.zip "https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jre/hotspot/normal/eclipse"
+          curl.exe -sSL -o jre.zip "https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jre/hotspot/normal/eclipse"
           Expand-Archive jre.zip jre-tmp
           $inner = (Get-ChildItem jre-tmp | Select-Object -First 1).FullName
           Move-Item $inner jre
@@ -69,7 +69,10 @@ jobs:
           foreach ($u in $urls) {
             for ($i = 1; $i -le 3 -and -not $ok; $i++) {
               try {
-                curl.exe -L --retry 3 --connect-timeout 30 -o tesseract\tessdata\fas.traineddata $u
+                # -sS: silent except errors (progress meter on stderr trips
+                # $ErrorActionPreference='Stop' on PS 7.4+ runners).
+                curl.exe -sSL --retry 3 --connect-timeout 30 -o tesseract\tessdata\fas.traineddata $u
+                if ($LASTEXITCODE -ne 0) { throw "curl exit $LASTEXITCODE" }
                 if ((Get-Item tesseract\tessdata\fas.traineddata).Length -gt 100000) { $ok = $true }
               } catch { Start-Sleep -Seconds (5 * $i) }
             }
