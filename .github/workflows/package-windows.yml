@@ -52,62 +52,54 @@ jobs:
       - name: Get portable Tesseract + Persian data
         shell: pwsh
         run: |
-          # Three independent install mechanisms: choco (green v0.2.0-0.2.2),
-          # winget (official UB-Mannheim package), direct EXE silent install.
-          # First one that yields tesseract.exe wins. Breadcrumbs via Write-Output
-          # so the failing part is visible in logs without guesswork.
+          # NOTE (root cause, tesseract-ocr/tesseract#4394): the UB-Mannheim 5.5.x
+          # Windows installer (used by choco tesseract >= 5.5.3) FAILS its bundled
+          # language-data download, leaving tessdata without eng.traineddata, so
+          # `tesseract --list-langs` exits 1. Fix: install the ENGINE via choco,
+          # but ship eng+fas ourselves from tessdata_fast (same as the Docker
+          # image does with Debian tesseract-ocr-eng/fas packages).
           $tessExe = 'C:\Program Files\Tesseract-OCR\tesseract.exe'
-          function Find-Tesseract {
-            foreach ($p in @(
-              'C:\Program Files\Tesseract-OCR\tesseract.exe',
-              'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe')) {
-              if (Test-Path $p) { return $p }
+          if (!(Test-Path $tessExe)) {
+            if (Get-Command choco -ErrorAction SilentlyContinue) {
+              choco install tesseract --no-progress -y
             }
-            $hit = Get-ChildItem -Path "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" `
-              -Filter 'tesseract.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($hit) { return $hit.FullName }
-            return $null
           }
-          $found = Find-Tesseract
-          if (-not $found -and (Get-Command choco -ErrorAction SilentlyContinue)) {
-            Write-Output 'Trying choco install tesseract...'
-            choco install tesseract --no-progress -y
-            $found = Find-Tesseract
+          if (!(Test-Path $tessExe)) {
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+              winget install -e --id UB-Mannheim.TesseractOCR --silent `
+                --accept-package-agreements --accept-source-agreements
+            }
           }
-          if (-not $found -and (Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Output 'Trying winget UB-Mannheim.TesseractOCR...'
-            winget install -e --id UB-Mannheim.TesseractOCR --silent `
-              --accept-package-agreements --accept-source-agreements
-            $found = Find-Tesseract
-          }
-          if (-not $found) {
-            Write-Output 'Trying direct UB-Mannheim EXE silent install...'
-            $exeUrl = 'https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe'
-            curl.exe -sSL --retry 3 --connect-timeout 30 -o tess-setup.exe $exeUrl
-            Start-Process -FilePath '.\tess-setup.exe' -ArgumentList '/S' -Wait
-            Start-Sleep -Seconds 10
-            $found = Find-Tesseract
-          }
-          if (-not $found) { throw 'tesseract.exe not found after choco+winget+direct attempts' }
-          Write-Output "Found tesseract at: $found"
-          $tessDir = Split-Path $found
+          if (!(Test-Path $tessExe)) { throw 'tesseract.exe not found after install attempts' }
+          $tessDir = Split-Path $tessExe
           New-Item -ItemType Directory -Force tesseract | Out-Null
           Copy-Item (Join-Path $tessDir 'tesseract.exe') tesseract\
-          Copy-Item -Recurse (Join-Path $tessDir 'tessdata') tesseract\
-          curl.exe -sSL --retry 3 --connect-timeout 30 `
-            -o tesseract\tessdata\fas.traineddata `
-            'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/fas.traineddata'
-          if (!(Test-Path tesseract\tessdata\fas.traineddata) `
-            -or ((Get-Item tesseract\tessdata\fas.traineddata).Length -lt 100000)) {
-            curl.exe -sSL --retry 3 --connect-timeout 30 `
-              -o tesseract\tessdata\fas.traineddata `
-              'https://github.com/tesseract-ocr/tessdata_fast/raw/main/fas.traineddata'
+          Copy-Item -Recurse (Join-Path $tessDir 'tessdata') tesseract\ -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force tesseract\tessdata | Out-Null
+          # Copy runtime DLLs next to the exe (leptonica etc. ship beside it).
+          Copy-Item (Join-Path $tessDir '*.dll') tesseract\ -ErrorAction SilentlyContinue
+          # Authoritative language data: tessdata_fast works with Tesseract 5.x.
+          foreach ($lang in @('eng', 'fas', 'osd')) {
+            $dest = Join-Path 'tesseract\tessdata' ($lang + '.traineddata')
+            $done = $false
+            foreach ($base in @(
+              'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main',
+              'https://github.com/tesseract-ocr/tessdata_fast/raw/main')) {
+              if ($done) { break }
+              for ($i = 1; $i -le 3 -and -not $done; $i++) {
+                curl.exe -sSL --retry 3 --connect-timeout 30 -o $dest ($base + '/' + $lang + '.traineddata')
+                if ((Test-Path $dest) -and ((Get-Item $dest).Length -gt 50000)) { $done = $true }
+                else { Start-Sleep -Seconds (5 * $i) }
+              }
+            }
+            if (-not $done) { throw "language data download failed for: $lang" }
+            Write-Output "$lang.traineddata OK ($((Get-Item $dest).Length) bytes)"
           }
-          if (!(Test-Path tesseract\tessdata\fas.traineddata) `
-            -or ((Get-Item tesseract\tessdata\fas.traineddata).Length -lt 100000)) {
-            throw 'fas.traineddata download looks incomplete'
+          $langs = & .\tesseract\tesseract.exe --list-langs 2>&1 | Out-String
+          Write-Output $langs
+          if ($langs -notmatch 'eng' -or $langs -notmatch 'fas') {
+            throw "tesseract language check failed, output was: $langs"
           }
-          .\tesseract\tesseract.exe --list-langs
 
       - name: Assemble package
         shell: pwsh
