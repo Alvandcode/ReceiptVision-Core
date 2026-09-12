@@ -21,7 +21,9 @@ permissions:
 
 jobs:
   build-package:
-    runs-on: windows-latest
+    # Pinned: windows-latest moved and broke choco/tesseract provisioning
+    # (v0.2.0-0.2.2 were green on windows-2022).
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v5
 
