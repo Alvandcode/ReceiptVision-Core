@@ -207,6 +207,16 @@ curl "http://localhost:8080/api/receipts?page=0&size=20" \
 
 پاسخ، `Page` استاندارد Spring است (`content`, `totalElements`, `totalPages`, `number`, `size`). سقف `size=100` برای جلوگیری از OOM.
 
+نمونه خروجی (خلاصه‌شده):
+
+| فیلد | مقدار نمونه |
+|---|---|
+| `content[0].id` | `1` |
+| `content[0].fileName` | `receipt.jpg` |
+| `content[0].ocrText` | `TOTAL 125000 ...` |
+| `totalElements` / `totalPages` | `1` / `1` |
+| `number` / `size` | `0` / `20` |
+
 ### دریافت یک رسید خاص
 
 ```bash
@@ -265,26 +275,17 @@ curl -X DELETE http://localhost:8080/api/receipts/1 -H "Authorization: Bearer $T
 
 ---
 
-## 🤝 مشارکت
+## 🤝 مشارکت / Contributing
 
-ایشو یا PR بفرستید. قبل از PR حتماً `mvn -B verify` سبز باشد.
+- FA: ایشو یا PR بفرستید. قبل از PR حتماً `mvn -B verify` سبز باشد. جزئیات در [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- EN: Issues and Pull Requests are welcome. Please see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---
 
-## 📄 لایسنس
+## 📄 لایسنس / License
 
 این پروژه تحت لایسنس [MIT](LICENSE) منتشر شده است.
-
----
-
-## Contributing / مشارکت
-
-- EN: Issues and Pull Requests are welcome. Please see `CONTRIBUTING.md`.
-- FA: برای گزارش مشکل یا پیشنهاد قابلیت جدید، لطفا ایشو یا پول‌ریکوئست ثبت کنید.
-
-## License / لایسنس
-
-MIT — see [LICENSE](./LICENSE).
+This project is licensed under the [MIT](LICENSE) license.
 
 ## Contact / ارتباط
 
